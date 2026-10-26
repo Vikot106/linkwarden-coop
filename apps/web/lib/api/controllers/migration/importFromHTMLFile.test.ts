@@ -15,11 +15,15 @@ let removeFolder: typeof import("@linkwarden/filesystem").removeFolder;
 const createdUserIds: number[] = [];
 
 const ensureTestEnv = async () => {
-  await import("dotenv/config");
-
-  if (!process.env.DATABASE_URL) {
+  const url = new URL(process.env.ENTERPRISE_TEST_DATABASE_URL!);
+  if (
+    process.env.DATABASE_URL !== url.href ||
+    url.hostname !== "127.0.0.1" ||
+    url.port !== "55432" ||
+    url.pathname !== "/enterprise_test"
+  ) {
     throw new Error(
-      "DATABASE_URL must be set to run integration tests for importFromHTMLFile."
+      "Import tests require the isolated enterprise_test database on 127.0.0.1:55432."
     );
   }
 
@@ -91,7 +95,9 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-describe.sequential("importFromHTMLFile integration", () => {
+const integration = describe.skipIf(!process.env.ENTERPRISE_TEST_DATABASE_URL);
+
+integration.sequential("importFromHTMLFile integration", () => {
   it("returns an error when the link limit is exceeded", async () => {
     const user = await createTestUser();
 

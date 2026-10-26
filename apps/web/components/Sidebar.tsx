@@ -2,7 +2,7 @@ import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
 import { Transition } from "@headlessui/react";
 import SidebarHighlightLink from "@/components/SidebarHighlightLink";
-import CollectionListing from "@/components/CollectionListing";
+import EnterpriseCollections from "@/components/EnterpriseCollections";
 import { useTranslation } from "next-i18next";
 import { useCollections } from "@linkwarden/router/collections";
 import { useTags } from "@linkwarden/router/tags";
@@ -171,7 +171,7 @@ export default function Sidebar({
                 leaveTo="transform opacity-0 -translate-y-3"
               >
                 <div className="pl-4">
-                  <CollectionListing />
+                  <EnterpriseCollections />
                 </div>
               </Transition>
             )}

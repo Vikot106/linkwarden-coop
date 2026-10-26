@@ -6,17 +6,10 @@ import {
 import { anyPreservationPending } from "@linkwarden/lib/formatStats";
 import { PRESERVATION_POLL_INTERVAL } from "./links";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useSession } from "next-auth/react";
+import useAuthStatus from "./useAuthStatus";
 
 const useDashboardData = (auth?: MobileAuth) => {
-  let status: "loading" | "authenticated" | "unauthenticated";
-
-  if (!auth) {
-    const session = useSession();
-    status = session.status;
-  } else {
-    status = auth?.status;
-  }
+  const status = useAuthStatus(auth);
 
   return useQuery({
     queryKey: ["dashboardData"],
@@ -54,7 +47,7 @@ const useDashboardData = (auth?: MobileAuth) => {
         ...(data.links ?? []),
         ...Object.values(data.collectionLinks ?? {}).flat(),
       ];
-      return anyPreservationPending(links) ? PRESERVATION_POLL_INTERVAL : false;
+      return 2000;
     },
   });
 };

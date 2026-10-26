@@ -2,6 +2,7 @@ import {
   UpdateDashboardLayoutSchema,
   UpdateDashboardLayoutSchemaType,
 } from "@linkwarden/lib/schemaValidation";
+import getAccessibleCollectionIds from "@/lib/api/getAccessibleCollectionIds";
 import { prisma } from "@linkwarden/prisma";
 import getDashboardData from "./getDashboardDataV2";
 
@@ -28,13 +29,15 @@ export default async function updateDashboardLayout(
     .filter((id) => id !== undefined);
 
   if (collectionIds && collectionIds.length > 0) {
+    const { accessibleCollectionIds } =
+      await getAccessibleCollectionIds(userId);
     collectionIds = (
       await prisma.collection.findMany({
         where: {
           id: {
             in: collectionIds as number[],
           },
-          OR: [{ ownerId: userId }, { members: { some: { userId } } }],
+          AND: [{ id: { in: accessibleCollectionIds } }],
         },
       })
     ).map((collection) => collection.id);

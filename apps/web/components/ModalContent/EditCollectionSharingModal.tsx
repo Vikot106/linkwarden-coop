@@ -1,3 +1,4 @@
+import CollectionPermissions from "@/components/CollectionPermissions";
 import React, { useEffect, useState } from "react";
 import TextInput from "@/components/TextInput";
 import toast from "react-hot-toast";
@@ -111,6 +112,38 @@ export default function EditCollectionSharingModal({
 
   const router = useRouter();
   const isPublicRoute = router.pathname.startsWith("/public") ? true : false;
+
+  if (activeCollection.effectivePermission?.canManage && !isPublicRoute)
+    return (
+      <Modal toggleModal={onClose}>
+        <h2 className="text-xl mb-4">{t("share_and_collaborate")}</h2>
+        <CollectionPermissions collection={activeCollection} />
+        <label className="flex items-center gap-2 mt-5">
+          <input
+            type="checkbox"
+            className="checkbox checkbox-primary"
+            checked={activeCollection.isPublic}
+            disabled={updateCollection.isPending}
+            onChange={() =>
+              updateCollection.mutate(
+                { ...activeCollection, isPublic: !activeCollection.isPublic },
+                { onError: (error) => toast.error(error.message) }
+              )
+            }
+          />
+          {t("make_collection_public_checkbox")}
+        </label>
+        <p className="text-sm text-neutral mt-2">
+          {t("make_collection_public_desc")}
+        </p>
+        {activeCollection.isPublic && (
+          <div className="flex items-center gap-2 mt-3 break-all">
+            {publicCollectionURL}
+            <CopyButton text={publicCollectionURL} />
+          </div>
+        )}
+      </Modal>
+    );
 
   return (
     <Modal toggleModal={onClose}>

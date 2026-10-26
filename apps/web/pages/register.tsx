@@ -1,3 +1,4 @@
+import { getPageTranslations } from "@/lib/client/getServerSideProps";
 import Link from "next/link";
 import React, { useState, FormEvent } from "react";
 import { toast } from "react-hot-toast";
@@ -8,10 +9,6 @@ import TextInput from "@/components/TextInput";
 import { Button } from "@/components/ui/button";
 import { getLogins } from "./api/v1/logins";
 import { GetServerSideProps, InferGetServerSidePropsType } from "next";
-import { getToken } from "next-auth/jwt";
-import { prisma } from "@linkwarden/prisma";
-import { serverSideTranslations } from "next-i18next/serverSideTranslations";
-import { i18n } from "next-i18next.config";
 import { useTranslation } from "next-i18next";
 import { useConfig } from "@linkwarden/router/config";
 import { Separator } from "@/components/ui/separator";
@@ -304,58 +301,11 @@ export default function Register({
   );
 }
 
-const getServerSideProps: GetServerSideProps = async (ctx) => {
-  const availableLogins = getLogins();
-
-  const acceptLanguageHeader = ctx.req.headers["accept-language"];
-  const availableLanguages = i18n.locales;
-
-  const token = await getToken({ req: ctx.req });
-
-  if (token) {
-    const user = await prisma.user.findUnique({
-      where: {
-        id: token.id,
-      },
-    });
-
-    if (user) {
-      return {
-        props: {
-          availableLogins,
-          ...(await serverSideTranslations(user.locale ?? "en", ["common"])),
-        },
-      };
-    }
-  }
-
-  const acceptedLanguages = acceptLanguageHeader
-    ?.split(",")
-    .map((lang) => lang.split(";")[0]);
-
-  let bestMatch = acceptedLanguages?.find((lang) =>
-    availableLanguages.includes(lang)
-  );
-
-  if (!bestMatch) {
-    acceptedLanguages?.some((acceptedLang) => {
-      const partialMatch = availableLanguages.find((lang) =>
-        lang.startsWith(acceptedLang)
-      );
-      if (partialMatch) {
-        bestMatch = partialMatch;
-        return true;
-      }
-      return false;
-    });
-  }
-
-  return {
-    props: {
-      availableLogins,
-      ...(await serverSideTranslations(bestMatch ?? "en", ["common"])),
-    },
-  };
-};
+const getServerSideProps: GetServerSideProps = async (ctx) => ({
+  props: {
+    availableLogins: getLogins(),
+    ...(await getPageTranslations(ctx)),
+  },
+});
 
 export { getServerSideProps };

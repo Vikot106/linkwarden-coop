@@ -1,5 +1,7 @@
 import { verifyGoogleIdentityToken } from "@/lib/api/google";
 import createSession from "@/lib/api/controllers/session/createSession";
+import { defaultGroupMemberships } from "@/lib/api/collectionAccess";
+import { getNewUserLocale } from "@/lib/shared/language";
 import { prisma } from "@linkwarden/prisma";
 import type { NextApiRequest, NextApiResponse } from "next";
 
@@ -80,10 +82,12 @@ export default async function googleMobileAuth(
     const fullName =
       typeof name === "string" && name.trim()
         ? name.trim()
-        : (claims.name?.trim() ?? "");
+        : claims.name?.trim() ?? "";
 
     user = await prisma.user.create({
       data: {
+        groupMemberships: await defaultGroupMemberships(),
+        locale: getNewUserLocale(),
         name: fullName,
         email,
         emailVerified: new Date(),

@@ -20,7 +20,23 @@ export default async function deleteCollection(
     (e: UsersAndCollections) => e.userId === userId
   );
 
-  if (collectionIsAccessible?.ownerId !== userId && memberHasAccess) {
+  const canDeleteChild =
+    !!collectionIsAccessible?.parentId &&
+    !!collectionIsAccessible?.effectivePermission.canDelete;
+  if (
+    collectionIsAccessible?.ownerId !== userId &&
+    !canDeleteChild &&
+    memberHasAccess
+  ) {
+    const direct = await prisma.usersAndCollections.findUnique({
+      where: { userId_collectionId: { userId, collectionId } },
+    });
+    if (!direct)
+      return {
+        response:
+          "This collection is assigned by a group or the company. Contact its manager.",
+        status: 403,
+      };
     // Remove relation/Leave collection
     const deletedUsersAndCollectionsRelation =
       await prisma.usersAndCollections.delete({
@@ -47,7 +63,7 @@ export default async function deleteCollection(
     });
 
     return { response: deletedUsersAndCollectionsRelation, status: 200 };
-  } else if (collectionIsAccessible?.ownerId !== userId) {
+  } else if (collectionIsAccessible?.ownerId !== userId && !canDeleteChild) {
     return { response: "Collection is not accessible.", status: 401 };
   }
 

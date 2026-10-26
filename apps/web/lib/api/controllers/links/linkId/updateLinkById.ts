@@ -1,5 +1,5 @@
 import { prisma } from "@linkwarden/prisma";
-import { UsersAndCollections } from "@linkwarden/prisma/client";
+import { Prisma } from "@linkwarden/prisma/client";
 import getPermission from "@/lib/api/getPermission";
 import { moveFiles, removeFiles } from "@linkwarden/filesystem";
 import isValidUrl from "@/lib/shared/isValidUrl";
@@ -14,188 +14,125 @@ export default async function updateLinkById(
   body: UpdateLinkSchemaType,
   removePreviousTags?: boolean
 ) {
-  const dataValidation = UpdateLinkSchema.safeParse(body);
-
-  if (!dataValidation.success) {
-    return {
-      response: `Error: ${
-        dataValidation.error.issues[0].message
-      } [${dataValidation.error.issues[0].path.join(", ")}]`,
-      status: 400,
-    };
-  }
-
-  const data = dataValidation.data;
-
-  const collectionIsAccessible = await getPermission({ userId, linkId });
-
-  const isCollectionOwner =
-    collectionIsAccessible?.ownerId === data.collection.ownerId &&
-    data.collection.ownerId === userId;
-
-  const canPinPermission = collectionIsAccessible?.members.some(
-    (e: UsersAndCollections) => e.userId === userId
-  );
-
-  // If the user is part of a collection, they can pin it to their dashboard
-  if (canPinPermission && data.pinnedBy && data.pinnedBy[0]) {
-    const updatedLink = await prisma.link.update({
-      where: {
-        id: linkId,
-      },
+  const parsed = UpdateLinkSchema.safeParse(body);
+  if (!parsed.success)
+    return { response: parsed.error.issues[0].message, status: 400 };
+  const data = parsed.data;
+  const source = await getPermission({ userId, linkId });
+  if (!source)
+    return { response: "Collection is not accessible.", status: 403 };
+  const include = {
+    tags: true,
+    collection: true,
+    pinnedBy: { where: { id: userId }, select: { id: true } },
+  };
+  // Pinning changes only the caller's dashboard; it never updates shared content.
+  if (data.pinOnly) {
+    const link = await prisma.link.update({
+      where: { id: linkId },
       data: {
-        pinnedBy: data?.pinnedBy
-          ? data.pinnedBy[0]?.id === userId
+        pinnedBy:
+          data.pinnedBy?.[0]?.id === userId
             ? { connect: { id: userId } }
-            : { disconnect: { id: userId } }
-          : undefined,
+            : { disconnect: { id: userId } },
       },
-      include: {
-        collection: true,
-        pinnedBy: isCollectionOwner
-          ? {
-              where: { id: userId },
-              select: { id: true },
-            }
-          : undefined,
-      },
+      include,
     });
-
-    return { response: updatedLink, status: 200 };
+    return { response: link, status: 200 };
   }
-
-  const targetCollectionIsAccessible = await getPermission({
-    userId,
-    collectionId: data.collection.id,
-  });
-
-  const memberHasAccess = collectionIsAccessible?.members.some(
-    (e: UsersAndCollections) => e.userId === userId && e.canUpdate
+  if (!source.effectivePermission.canUpdate)
+    return { response: "Collection is not accessible.", status: 403 };
+  const moving = source.id !== data.collection.id;
+  const target = moving
+    ? await getPermission({ userId, collectionId: data.collection.id })
+    : source;
+  if (
+    !target ||
+    (moving &&
+      (!source.effectivePermission.canDelete ||
+        !target.effectivePermission.canCreate))
+  )
+    return {
+      response:
+        "Moving a link requires delete access to the source and create access to the target.",
+      status: 403,
+    };
+  if (source.effectivePermission.shared && data.version === undefined)
+    return {
+      response:
+        "Reload this link before editing; a version is required for shared content.",
+      status: 409,
+    };
+  const oldLink = await prisma.link.findUnique({ where: { id: linkId } });
+  if (!oldLink) return { response: "Link not found.", status: 404 };
+  if (data.version !== undefined && oldLink.version !== data.version)
+    return {
+      response:
+        "This link was changed by another user. Reload it before saving.",
+      status: 409,
+    };
+  const nextUrl = data.url === undefined ? oldLink.url : data.url;
+  const urlChanged = nextUrl !== oldLink.url;
+  if (urlChanged && (!nextUrl || !isValidUrl(nextUrl)))
+    return { response: "Invalid URL.", status: 400 };
+  const tags = Array.from(
+    new Map(
+      data.tags
+        .filter((t) => t.name.trim())
+        .map((tag) => [tag.name.trim(), tag])
+    ).values()
   );
-
-  const targetCollectionMatchesData = data.collection.id
-    ? data.collection.id === targetCollectionIsAccessible?.id
-    : true && data.collection.ownerId
-      ? data.collection.ownerId === targetCollectionIsAccessible?.ownerId
-      : true;
-
-  if (!targetCollectionMatchesData)
-    return {
-      response: "Target collection does not match the data.",
-      status: 401,
-    };
-
-  const unauthorizedSwitchCollection =
-    !isCollectionOwner && collectionIsAccessible?.id !== data.collection.id;
-
-  // Makes sure collection members (non-owners) cannot move a link to/from a collection.
-  if (unauthorizedSwitchCollection)
-    return {
-      response: "You can't move a link to/from a collection you don't own.",
-      status: 401,
-    };
-  else if (collectionIsAccessible?.ownerId !== userId && !memberHasAccess)
-    return {
-      response: "Collection is not accessible.",
-      status: 401,
-    };
-  else {
-    const oldLink = await prisma.link.findUnique({
-      where: {
-        id: linkId,
-      },
-    });
-
-    const uniqueTags = (() => {
-      const seen = new Set<string>();
-      return (data.tags ?? []).filter((t) => {
-        const key = t.name;
-        if (!key) return false;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-    })();
-
-    const tagConnectOrCreate = uniqueTags.map((tag) => ({
-      where: {
-        name_ownerId: {
-          name: tag.name,
-          ownerId: data.collection.ownerId,
-        },
-      },
-      create: {
-        name: tag.name,
-        owner: { connect: { id: data.collection.ownerId } },
-      },
-    }));
-
-    if (
-      data.url &&
-      oldLink &&
-      oldLink?.url !== data.url &&
-      isValidUrl(data.url)
-    ) {
-      await removeFiles(oldLink.id, oldLink.collectionId);
-    } else if (oldLink?.url !== data.url)
-      return {
-        response: "Invalid URL.",
-        status: 401,
-      };
-
-    const updatedLink = await prisma.link.update({
-      where: {
-        id: linkId,
-      },
+  const connectOrCreate = tags.map((tag) => ({
+    where: { name_ownerId: { name: tag.name.trim(), ownerId: target.ownerId } },
+    create: {
+      name: tag.name.trim(),
+      owner: { connect: { id: target.ownerId } },
+    },
+  }));
+  let updated;
+  try {
+    // Compare and increment in the same SQL update; two writers cannot both win.
+    updated = await prisma.link.update({
+      where: { id: linkId, version: data.version ?? oldLink.version },
       data: {
-        name: data.name || "",
-        url: data.url,
-        description: data.description || "",
+        version: { increment: 1 },
+        name: data.name ?? "",
+        url: nextUrl,
+        description: data.description ?? "",
         icon: data.icon,
         iconWeight: data.iconWeight,
         color: data.color,
-        image: oldLink?.url !== data.url ? null : undefined,
-        pdf: oldLink?.url !== data.url ? null : undefined,
-        readable: oldLink?.url !== data.url ? null : undefined,
-        monolith: oldLink?.url !== data.url ? null : undefined,
-        preview: oldLink?.url !== data.url ? null : undefined,
-        lastPreserved: oldLink?.url !== data.url ? null : undefined,
+        ...(urlChanged
+          ? {
+              image: null,
+              pdf: null,
+              readable: null,
+              monolith: null,
+              preview: null,
+              lastPreserved: null,
+            }
+          : {}),
         indexVersion: null,
-        collection: {
-          connect: {
-            id: data.collection.id,
-          },
-        },
+        collection: { connect: { id: target.id } },
         tags: removePreviousTags
-          ? {
-              set: [],
-              connectOrCreate: tagConnectOrCreate,
-            }
-          : {
-              connectOrCreate: tagConnectOrCreate,
-            },
-        pinnedBy: data?.pinnedBy
-          ? data.pinnedBy[0]?.id === userId
-            ? { connect: { id: userId } }
-            : { disconnect: { id: userId } }
-          : undefined,
+          ? { set: [], connectOrCreate }
+          : { connectOrCreate },
       },
-      include: {
-        tags: true,
-        collection: true,
-        pinnedBy: isCollectionOwner
-          ? {
-              where: { id: userId },
-              select: { id: true },
-            }
-          : undefined,
-      },
+      include,
     });
-
-    if (collectionIsAccessible?.id !== data.collection.id) {
-      await moveFiles(linkId, collectionIsAccessible?.id, data.collection.id);
-    }
-
-    return { response: updatedLink, status: 200 };
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2025"
+    )
+      return {
+        response:
+          "This link was changed by another user. Reload it before saving.",
+        status: 409,
+      };
+    throw error;
   }
+  if (urlChanged) await removeFiles(linkId, source.id);
+  else if (moving) await moveFiles(linkId, source.id, target.id);
+  return { response: updated, status: 200 };
 }

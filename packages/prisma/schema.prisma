@@ -46,6 +46,7 @@ model User {
   createdCollections      Collection[]          @relation("CreatedCollections")
   highlights              Highlight[]
   collectionsJoined       UsersAndCollections[]
+  groupMemberships        UserGroupMember[]
   collectionOrder         Int[]                 @default([])
   whitelistedUsers        WhitelistedUser[]
   accessTokens            AccessToken[]
@@ -139,6 +140,8 @@ model Collection {
   owner            User                  @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   ownerId          Int
   members          UsersAndCollections[]
+  scope            CollectionScope       @default(PERSONAL)
+  groupPermissions CollectionGroupPermission[]
   createdBy        User?                 @relation("CreatedCollections", fields: [createdById], references: [id])
   createdById      Int?
   links            Link[]
@@ -158,6 +161,7 @@ model UsersAndCollections {
   canCreate    Boolean
   canUpdate    Boolean
   canDelete    Boolean
+  canManage    Boolean    @default(false)
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @default(now()) @updatedAt
 
@@ -165,8 +169,56 @@ model UsersAndCollections {
   @@index([userId])
 }
 
+enum CollectionScope {
+  PERSONAL
+  DEPARTMENT
+  COMPANY
+}
+
+enum CollectionPermission {
+  READ
+  EDIT
+  MANAGE
+}
+
+model UserGroup {
+  id          Int                         @id @default(autoincrement())
+  name        String                      @unique
+  description String                      @default("")
+  isDefault   Boolean                     @default(false)
+  members     UserGroupMember[]
+  permissions CollectionGroupPermission[]
+  createdAt   DateTime                    @default(now())
+  updatedAt   DateTime                    @default(now()) @updatedAt
+}
+
+model UserGroupMember {
+  groupId   Int
+  userId    Int
+  group     UserGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+
+  @@id([groupId, userId])
+  @@index([userId])
+}
+
+model CollectionGroupPermission {
+  collectionId Int
+  groupId      Int
+  permission   CollectionPermission @default(READ)
+  collection   Collection           @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  group        UserGroup            @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @default(now()) @updatedAt
+
+  @@id([collectionId, groupId])
+  @@index([groupId])
+}
+
 model Link {
   id              Int         @id @default(autoincrement())
+  version         Int         @default(0)
   name            String      @default("")
   type            String      @default("url")
   description     String      @default("")

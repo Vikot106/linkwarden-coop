@@ -12,16 +12,8 @@ import { isPWA } from "@/lib/utils";
 // import useInitialData from "@/hooks/useInitialData";
 import { appWithTranslation } from "next-i18next";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import AccountQueryProvider from "@/components/AccountQueryProvider";
 import { NextPage } from "next";
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 1000 * 30,
-    },
-  },
-});
 
 export type NextPageWithLayout<P = {}, IP = P> = NextPage<P, IP> & {
   getLayout?: (page: ReactElement<any>) => ReactNode;
@@ -46,14 +38,14 @@ function App({ Component, pageProps }: AppPropsWithLayout) {
   }, []);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <SessionProvider
-        session={pageProps.session}
-        refetchOnWindowFocus={false}
-        basePath="/api/v1/auth"
-      >
+    <SessionProvider
+      session={pageProps.session}
+      refetchOnWindowFocus={false}
+      basePath="/api/v1/auth"
+    >
+      <AccountQueryProvider>
         <Head>
-          <title>Linkwarden</title>
+          <title>{process.env.NEXT_PUBLIC_SITE_TITLE || "Linkwarden"}</title>
           <meta name="viewport" content="width=device-width, initial-scale=1" />
           <meta name="theme-color" content="#ffffff" />
           <link
@@ -109,9 +101,9 @@ function App({ Component, pageProps }: AppPropsWithLayout) {
           {getLayout(<Component {...pageProps} />)}
           {/* </GetData> */}
         </AuthRedirect>
-      </SessionProvider>
-      <ReactQueryDevtools initialIsOpen={false} />
-    </QueryClientProvider>
+        <ReactQueryDevtools initialIsOpen={false} />
+      </AccountQueryProvider>
+    </SessionProvider>
   );
 }
 

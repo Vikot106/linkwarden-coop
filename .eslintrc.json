@@ -3,5 +3,10 @@
   "rules": {
     "react-hooks/exhaustive-deps": "off",
     "@next/next/no-img-element": "off"
+  },
+  "settings": {
+    "next": {
+      "rootDir": "apps/web/"
+    }
   }
 }

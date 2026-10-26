@@ -24,7 +24,13 @@
     "format": "yarn workspaces run format",
     "test": "vitest",
     "coverage": "vitest run --coverage",
-    "postinstall": "yarn workspace @linkwarden/web run postinstall && patch-package"
+    "postinstall": "yarn workspace @linkwarden/web run postinstall && patch-package",
+    "test:enterprise": "node scripts/test-enterprise.cjs",
+    "dev": "node scripts/dev.cjs start",
+    "dev:stop": "node scripts/dev.cjs stop",
+    "dev:status": "node scripts/dev.cjs status",
+    "dev:doctor": "node scripts/dev.cjs doctor",
+    "dev:logs": "node scripts/dev.cjs logs"
   },
   "devDependencies": {
     "vitest": "^4.1.0"

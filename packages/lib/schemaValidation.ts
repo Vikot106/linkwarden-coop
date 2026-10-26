@@ -150,6 +150,8 @@ export type PostLinkSchemaType = z.infer<typeof PostLinkSchema>;
 
 export const UpdateLinkSchema = z.object({
   id: z.number(),
+  version: z.number().int().nonnegative().optional(),
+  pinOnly: z.boolean().optional(),
   name: z.string().trim().max(2048).nullish(),
   url: z.string().trim().max(2048).nullish(),
   description: z.string().trim().max(2048).nullish(),
@@ -234,6 +236,7 @@ export const UpdateCollectionSchema = z.object({
       canCreate: z.boolean(),
       canUpdate: z.boolean(),
       canDelete: z.boolean(),
+      canManage: z.boolean().optional(),
     })
   ),
   propagateToSubcollections: z.boolean().optional(),

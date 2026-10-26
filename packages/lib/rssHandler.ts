@@ -1,5 +1,6 @@
 import { RssSubscription } from "@linkwarden/prisma/client";
 import { hasPassedLimit } from "./verifyCapacity";
+import { getCollectionAccess } from "./collectionAccess";
 import { prisma } from "@linkwarden/prisma";
 import Parser from "rss-parser";
 import { assertUrlIsSafeForServerSideFetch } from "./ssrf";
@@ -9,6 +10,10 @@ export const rssHandler = async (
   feed: Parser.Output<any>
 ) => {
   try {
+    const access = (await getCollectionAccess(rssSubscription.ownerId)).get(
+      rssSubscription.collectionId
+    );
+    if (!access?.canCreate) return;
     const feedLastBuildDate = (feed as any).lastBuildDate as
       | string
       | Date

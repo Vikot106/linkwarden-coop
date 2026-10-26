@@ -13,7 +13,9 @@ async function init() {
 
   console.log("\x1b[34m%s\x1b[0m", "Initializing the worker...");
   startRSSPolling();
-  linkProcessing(workerIntervalInSeconds);
+  if (process.env.DEV_SKIP_PRESERVATION !== "true") {
+    linkProcessing(workerIntervalInSeconds);
+  }
   autoTagPreservedLinks(workerIntervalInSeconds);
   startIndexing(workerIntervalInSeconds);
   // trialEndEmailWorker();

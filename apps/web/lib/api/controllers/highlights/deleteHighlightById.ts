@@ -1,3 +1,4 @@
+import getPermission from "@/lib/api/getPermission";
 import { prisma } from "@linkwarden/prisma";
 
 export default async function deleteHighlightById(
@@ -7,6 +8,13 @@ export default async function deleteHighlightById(
   if (!highlightId)
     return { response: "Please choose a valid highlight.", status: 401 };
 
+  const highlight = await prisma.highlight.findUnique({
+    where: { id: highlightId, userId },
+  });
+  const access =
+    highlight && (await getPermission({ userId, linkId: highlight.linkId }));
+  if (!access?.effectivePermission.canUpdate)
+    return { response: "Collection is not accessible.", status: 403 };
   const targetHighlight = await prisma.highlight.delete({
     where: {
       id: highlightId,

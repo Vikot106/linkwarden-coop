@@ -1,3 +1,4 @@
+import getPermission from "@/lib/api/getPermission";
 import { prisma } from "@linkwarden/prisma";
 import { PostHighlightSchemaType } from "@linkwarden/lib/schemaValidation";
 
@@ -6,18 +7,7 @@ export default async function postOrUpdateHighlight(
   body: PostHighlightSchemaType
 ) {
   // check if user has access to collection
-  const collection = await prisma.collection.findFirst({
-    where: {
-      links: {
-        some: {
-          id: body.linkId,
-        },
-      },
-    },
-    include: {
-      members: true,
-    },
-  });
+  const collection = await getPermission({ userId, linkId: body.linkId });
 
   if (
     !collection ||

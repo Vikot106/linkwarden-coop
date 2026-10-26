@@ -6,6 +6,7 @@ const nextConfig = {
   i18n,
   reactStrictMode: true,
   devIndicators: false,
+  distDir: process.env.NEXT_BUILD_DIR || ".next",
   staticPageGenerationTimeout: 1000,
   images: {
     remotePatterns: [
@@ -17,7 +18,8 @@ const nextConfig = {
   },
   transpilePackages: ["@linkwarden/prisma"],
   env: {
-    version,
+    version: process.env.INSTANCE_VERSION || version,
+    NEXT_PUBLIC_SITE_TITLE: process.env.SITE_TITLE || "Linkwarden",
   },
   webpack(config) {
     config.resolve.fallback = {

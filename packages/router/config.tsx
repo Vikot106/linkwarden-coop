@@ -1,7 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { MobileAuth } from "@linkwarden/types/global";
+import type { InstanceAnnouncement } from "@linkwarden/types/config";
 
 export type Config = {
+  SITE_TITLE: string;
+  DEFAULT_LANGUAGE: string;
+  NEW_USER_DEFAULT_LANGUAGE: string;
+  ANNOUNCEMENT: InstanceAnnouncement | null;
   DISABLE_REGISTRATION: boolean | null;
   ADMIN: number | null;
   RSS_POLLING_INTERVAL_MINUTES: number | null;

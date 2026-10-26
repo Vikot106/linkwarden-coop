@@ -1,11 +1,4 @@
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ArchivedFormat } from "@linkwarden/types/global";
 import createPreservedFormatUrl, {
   decodePreservedFormatToken,
@@ -29,6 +22,7 @@ describe("createPreservedFormatUrl", () => {
       linkId: 42,
       filePath: "archives/7/42.html",
       format: ArchivedFormat.monolith,
+      userId: 7,
     });
 
     const parsed = new URL(url);
@@ -41,6 +35,7 @@ describe("createPreservedFormatUrl", () => {
     const decoded = await decodePreservedFormatToken(token as string);
     expect(decoded).toMatchObject({
       scope: "preserved-format",
+      userId: 7,
       linkId: 42,
       filePath: "archives/7/42.html",
       format: ArchivedFormat.monolith,

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import handler from "./[linkId]";
+import handler from "@/pages/api/v1/archives/[linkId]";
 import verifyToken from "@/lib/api/verifyToken";
 import resolveAccessibleArchive from "@/lib/api/archives/resolveAccessibleArchive";
 import { readFile } from "@linkwarden/filesystem";
@@ -50,7 +50,10 @@ const createMockResponse = () => {
 
 describe("/api/v1/archives/[linkId] GET", () => {
   beforeEach(() => {
-    vi.stubEnv("NEXT_PUBLIC_USER_CONTENT_DOMAIN", "https://content.example.com");
+    vi.stubEnv(
+      "NEXT_PUBLIC_USER_CONTENT_DOMAIN",
+      "https://content.example.com"
+    );
   });
 
   afterEach(() => {

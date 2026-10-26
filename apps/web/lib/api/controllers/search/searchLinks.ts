@@ -73,6 +73,12 @@ export default async function searchLinks({
       publicOnly,
     });
 
+    if (userId && !publicOnly) {
+      const { accessibleCollectionIds } = await accessibleCollectionIdsPromise!;
+      meiliFilters[0] = accessibleCollectionIds.length
+        ? "collectionId IN [" + accessibleCollectionIds.join(",") + "]"
+        : "collectionId = -1";
+    }
     const limit = paginationTakeCount;
     const offset = query.cursor || 0;
 

@@ -1,3 +1,5 @@
+import { defaultGroupMemberships } from "@/lib/api/collectionAccess";
+import { getNewUserLocale } from "@/lib/shared/language";
 import { prisma } from "@linkwarden/prisma";
 import sendInvitationRequest from "@/lib/api/sendInvitationRequest";
 import sendVerificationRequest from "@/lib/api/sendVerificationRequest";
@@ -43,6 +45,15 @@ const emailEnabled =
 const newSsoUsersDisabled = process.env.DISABLE_NEW_SSO_USERS === "true";
 const adapter = PrismaAdapter(prisma);
 const linkAccount = adapter.linkAccount;
+
+adapter.createUser = async (data) =>
+  prisma.user.create({
+    data: {
+      ...data,
+      locale: getNewUserLocale(),
+      groupMemberships: await defaultGroupMemberships(),
+    },
+  }) as any;
 
 adapter.linkAccount = (account) => linkAccount?.(sanitizeAccount(account));
 

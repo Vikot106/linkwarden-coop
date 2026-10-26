@@ -6,6 +6,7 @@ import {
   PRESERVED_FORMAT_SCOPE,
 } from "@/lib/api/preserved/createPreservedFormatUrl";
 import { ArchivedFormat } from "@linkwarden/types/global";
+import resolveAccessibleArchive from "@/lib/api/archives/resolveAccessibleArchive";
 
 const getSingleValue = (value?: string | string[]) => {
   if (Array.isArray(value)) return value[0];
@@ -140,7 +141,22 @@ export default async function handler(
         .json({ response: "Invalid archived format token." });
     }
 
-    const { file, contentType, status } = await readFile(token.filePath);
+    const access = await resolveAccessibleArchive({
+      linkId: token.linkId,
+      format: token.format,
+      userId: token.userId,
+    });
+    if (access.status !== 200)
+      return res.status(access.status).json({ response: access.response });
+    if (access.response.filePath !== token.filePath)
+      return res
+        .status(403)
+        .json({
+          response: "The archived format has moved. Request a new URL.",
+        });
+    const { file, contentType, status } = await readFile(
+      access.response.filePath
+    );
     if (status !== 200) {
       return res.status(status as number).send(file);
     }

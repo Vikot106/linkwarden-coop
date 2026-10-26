@@ -1,3 +1,4 @@
+import { getCollectionAccess } from "@/lib/api/collectionAccess";
 import type { NextApiRequest, NextApiResponse } from "next";
 import verifyUser from "@/lib/api/verifyUser";
 import { prisma } from "@linkwarden/prisma";
@@ -27,27 +28,15 @@ export default async function links(req: NextApiRequest, res: NextApiResponse) {
     const { linkIds } = dataValidation.data;
 
     if (linkIds) {
+      const access = await getCollectionAccess(user.id);
+      const collectionIds = Array.from(access.entries())
+        .filter(([, p]) => p.canDelete)
+        .map(([id]) => id);
       const authorizedLinks = await prisma.link.findMany({
         where: {
           id: { in: linkIds },
           url: { not: null },
-          OR: [
-            {
-              collection: {
-                ownerId: user.id,
-              },
-            },
-            {
-              collection: {
-                members: {
-                  some: {
-                    userId: user.id,
-                    canDelete: true,
-                  },
-                },
-              },
-            },
-          ],
+          collectionId: { in: collectionIds },
         },
         select: {
           id: true,

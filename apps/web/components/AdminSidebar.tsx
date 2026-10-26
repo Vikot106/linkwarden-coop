@@ -19,6 +19,11 @@ export default function AdminSidebar({
       sidebarIsCollapsed={sidebarIsCollapsed}
       links={[
         {
+          title: t("enterprise_management"),
+          href: "/admin/enterprise",
+          icon: "bi-buildings",
+        },
+        {
           title: t("user_administration"),
           href: "/admin/user-administration",
           icon: "bi-people",

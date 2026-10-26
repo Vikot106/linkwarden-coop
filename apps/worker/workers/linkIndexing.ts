@@ -23,6 +23,7 @@ async function setupLinksIndexSchema() {
   const updateFilterableAttributes = await meiliClient
     .index("links")
     .updateFilterableAttributes([
+      "collectionId",
       "collectionOwnerId",
       "collectionMemberIds",
       "collectionName",

@@ -1,6 +1,8 @@
+import getAccessibleCollectionIds from "@/lib/api/getAccessibleCollectionIds";
 import { prisma } from "@linkwarden/prisma";
 
 export default async function exportData(userId: number) {
+  const { accessibleCollectionIds } = await getAccessibleCollectionIds(userId);
   const user = await prisma.user.findUnique({
     where: { id: userId },
     include: {
@@ -22,7 +24,7 @@ export default async function exportData(userId: number) {
           },
         },
       },
-      pinnedLinks: true,
+      pinnedLinks: { where: { collectionId: { in: accessibleCollectionIds } } },
     },
   });
 

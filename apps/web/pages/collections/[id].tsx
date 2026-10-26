@@ -192,7 +192,7 @@ const Page: NextPageWithLayout = () => {
                 {t("open_all_links")}
               </DropdownMenuItem>
 
-              {permissions === true && (
+              {(permissions === true || permissions?.canUpdate) && (
                 <DropdownMenuItem onClick={() => setEditCollectionModal(true)}>
                   <i className="bi-pencil-square" />
                   {t("edit_collection_info")}
@@ -220,22 +220,29 @@ const Page: NextPageWithLayout = () => {
 
               <DropdownMenuSeparator />
 
-              <DropdownMenuItem
-                onClick={() => setDeleteCollectionModal(true)}
-                className="text-error"
-              >
-                {permissions === true ? (
-                  <>
-                    <i className="bi-trash" />
-                    {t("delete_collection")}
-                  </>
-                ) : (
-                  <>
-                    <i className="bi-box-arrow-left" />
-                    {t("leave_collection")}
-                  </>
-                )}
-              </DropdownMenuItem>
+              {(permissions === true ||
+                (!!activeCollection.parentId && !!permissions?.canDelete) ||
+                activeCollection.members.some(
+                  (m) => m.userId === user?.id
+                )) && (
+                <DropdownMenuItem
+                  onClick={() => setDeleteCollectionModal(true)}
+                  className="text-error"
+                >
+                  {permissions === true ||
+                  (!!activeCollection.parentId && !!permissions?.canDelete) ? (
+                    <>
+                      <i className="bi-trash" />
+                      {t("delete_collection")}
+                    </>
+                  ) : (
+                    <>
+                      <i className="bi-box-arrow-left" />
+                      {t("leave_collection")}
+                    </>
+                  )}
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

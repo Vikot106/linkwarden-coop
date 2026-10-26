@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ArchivedFormat } from "@linkwarden/types/global";
-import handler from "./token";
+import handler from "@/pages/api/v1/preserved/token";
 import resolveAccessibleArchive from "@/lib/api/archives/resolveAccessibleArchive";
 import createPreservedFormatUrl from "@/lib/api/preserved/createPreservedFormatUrl";
 import verifyToken from "@/lib/api/verifyToken";

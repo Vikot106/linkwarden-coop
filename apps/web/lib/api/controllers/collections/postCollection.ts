@@ -5,129 +5,37 @@ import {
   PostCollectionSchemaType,
 } from "@linkwarden/lib/schemaValidation";
 import getPermission from "@/lib/api/getPermission";
-import { UsersAndCollections } from "@linkwarden/prisma/client";
-import getCollectionRootOwnerAndMembers from "../../getCollectionRootOwnerAndMembers";
+import getCollectionById from "./collectionId/getCollectionById";
 
 export default async function postCollection(
   body: PostCollectionSchemaType,
   userId: number
 ) {
-  const dataValidation = PostCollectionSchema.safeParse(body);
-
-  if (!dataValidation.success) {
+  const parsed = PostCollectionSchema.safeParse(body);
+  if (!parsed.success)
+    return { response: parsed.error.issues[0].message, status: 400 };
+  const data = parsed.data;
+  const parent = data.parentId
+    ? await getPermission({ userId, collectionId: data.parentId })
+    : null;
+  if (data.parentId && !parent?.effectivePermission.canCreate)
     return {
-      response: `Error: ${
-        dataValidation.error.issues[0].message
-      } [${dataValidation.error.issues[0].path.join(", ")}]`,
-      status: 400,
+      response: "You are not authorized to create a sub-collection here.",
+      status: 403,
     };
-  }
-
-  const collection = dataValidation.data;
-
-  let rootOwnerId = userId;
-  let dedupedUsers: {
-    userId: number;
-    canCreate: boolean;
-    canUpdate: boolean;
-    canDelete: boolean;
-  }[] = [];
-
-  if (collection.parentId) {
-    if (typeof collection.parentId !== "number") {
-      return {
-        response: "Invalid parentId.",
-        status: 400,
-      };
-    }
-
-    const permissionCheck = await getPermission({
-      userId,
-      collectionId: collection.parentId,
-    });
-
-    const memberHasAccess = permissionCheck?.members.some(
-      (e: UsersAndCollections) =>
-        e.userId === userId && e.canCreate && e.canUpdate && e.canDelete
-    );
-
-    if (!memberHasAccess && permissionCheck?.ownerId !== userId) {
-      return {
-        response: "You are not authorized to create a sub-collection here.",
-        status: 403,
-      };
-    }
-
-    const result = await getCollectionRootOwnerAndMembers(collection.parentId);
-
-    if (!result.rootOwnerId) {
-      return {
-        response: "Parent collection not found.",
-        status: 404,
-      };
-    }
-
-    rootOwnerId = result.rootOwnerId;
-    dedupedUsers = result.members;
-
-    const exists = dedupedUsers.some((u) => u.userId === userId);
-    if (!exists) {
-      dedupedUsers.push({
-        userId,
-        canCreate: true,
-        canUpdate: true,
-        canDelete: true,
-      });
-    }
-  }
-
-  const newCollection = await prisma.collection.create({
+  const collection = await prisma.collection.create({
     data: {
-      name: collection.name.trim(),
-      description: collection.description,
-      color: collection.color,
-      icon: collection.icon,
-      iconWeight: collection.iconWeight,
-      owner: { connect: { id: rootOwnerId } },
-      createdBy: { connect: { id: userId } },
-      members:
-        userId !== rootOwnerId
-          ? {
-              create: [
-                {
-                  userId,
-                  canCreate: true,
-                  canUpdate: true,
-                  canDelete: true,
-                },
-              ],
-            }
-          : undefined,
-      parent: collection.parentId
-        ? { connect: { id: collection.parentId } }
-        : undefined,
-    },
-    include: {
-      _count: { select: { links: true } },
-      members: {
-        include: {
-          user: {
-            select: { username: true, name: true },
-          },
-        },
-      },
+      ...data,
+      name: data.name.trim(),
+      ownerId: parent?.ownerId ?? userId,
+      createdById: userId,
     },
   });
-
   await prisma.user.update({
     where: { id: userId },
-    data: {
-      collectionOrder: { push: newCollection.id },
-    },
+    data: { collectionOrder: { push: collection.id } },
   });
-
-  createFolder({ filePath: `archives/${newCollection.id}` });
-  createFolder({ filePath: `archives/preview/${newCollection.id}` });
-
-  return { response: newCollection, status: 200 };
+  await createFolder({ filePath: "archives/" + collection.id });
+  await createFolder({ filePath: "archives/preview/" + collection.id });
+  return getCollectionById(userId, collection.id);
 }

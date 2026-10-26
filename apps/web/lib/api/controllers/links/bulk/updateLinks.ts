@@ -20,6 +20,7 @@ export default async function updateLinks(
     where: { id: { in: ids } },
     select: {
       id: true,
+      version: true,
       name: true,
       url: true,
       description: true,

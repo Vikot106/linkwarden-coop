@@ -13,7 +13,7 @@ import {
   MobileAuth,
   TagIncludingLinkCount,
 } from "@linkwarden/types/global";
-import { useSession } from "next-auth/react";
+import useAuthStatus from "./useAuthStatus";
 import {
   LinkArchiveActionSchemaType,
   PostLinkSchemaType,
@@ -66,14 +66,7 @@ const useLinks = (params: LinkRequestQuery = {}, auth?: MobileAuth) => {
 };
 
 const useFetchLinks = (params: string, auth?: MobileAuth) => {
-  let status: "loading" | "authenticated" | "unauthenticated";
-
-  if (!auth) {
-    const session = useSession();
-    status = session.status;
-  } else {
-    status = auth?.status;
-  }
+  const status = useAuthStatus(auth);
 
   return useInfiniteQuery({
     queryKey: ["links", { params }],
@@ -109,7 +102,7 @@ const useFetchLinks = (params: string, auth?: MobileAuth) => {
     refetchInterval: (query) => {
       const links =
         query.state.data?.pages?.flatMap((p) => p?.links ?? []) ?? [];
-      return anyPreservationPending(links) ? PRESERVATION_POLL_INTERVAL : false;
+      return 2000;
     },
   });
 };

@@ -3,7 +3,7 @@ import {
   CollectionIncludingMembersAndLinkCount,
   MobileAuth,
 } from "@linkwarden/types/global";
-import { useSession } from "next-auth/react";
+import useAuthStatus from "./useAuthStatus";
 import type toaster from "react-hot-toast";
 import { TFunction } from "next-i18next";
 
@@ -74,14 +74,7 @@ const removeCollectionsFromDashboard = (
 };
 
 const useCollections = (auth?: MobileAuth) => {
-  let status: "loading" | "authenticated" | "unauthenticated";
-
-  if (!auth) {
-    const session = useSession();
-    status = session.status;
-  } else {
-    status = auth?.status;
-  }
+  const status = useAuthStatus(auth);
 
   return useQuery({
     queryKey: ["collections"],
@@ -102,6 +95,9 @@ const useCollections = (auth?: MobileAuth) => {
       else return [];
     },
     enabled: status === "authenticated",
+    refetchInterval: 2000,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: "always",
   });
 };
 
@@ -227,9 +223,12 @@ const useDeleteCollection = ({
           user?.id != null &&
           targetCollection.ownerId === user.id
       );
-      const collectionIdsToRemove = isOwner
-        ? getCollectionSubtreeIds(previousCollections, id)
-        : [id];
+      const collectionIdsToRemove =
+        isOwner ||
+        (targetCollection?.parentId &&
+          targetCollection?.effectivePermission?.canDelete)
+          ? getCollectionSubtreeIds(previousCollections, id)
+          : [id];
       const deletedCollectionIds = new Set(collectionIdsToRemove);
 
       queryClient.setQueryData(["collections"], (oldData: any) => {

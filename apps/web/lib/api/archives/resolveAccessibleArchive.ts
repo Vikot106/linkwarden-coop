@@ -1,3 +1,4 @@
+import getPermission from "@/lib/api/getPermission";
 import { prisma } from "@linkwarden/prisma";
 import { ArchivedFormat } from "@linkwarden/types/global";
 import getSuffixFromFormat from "@/lib/shared/getSuffixFromFormat";
@@ -28,6 +29,17 @@ type ResolveAccessibleArchiveResult =
     };
 
 async function getAccessibleCollection(linkId: number, userId?: number) {
+  if (userId) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, emailVerified: true },
+    });
+    const active =
+      user &&
+      (process.env.NEXT_PUBLIC_EMAIL_PROVIDER !== "true" || user.emailVerified);
+    const accessible = active ? await getPermission({ userId, linkId }) : null;
+    if (accessible) return accessible;
+  }
   return prisma.collection.findFirst({
     where: {
       links: {
@@ -35,11 +47,7 @@ async function getAccessibleCollection(linkId: number, userId?: number) {
           id: linkId,
         },
       },
-      OR: [
-        { ownerId: userId || -1 },
-        { members: { some: { userId: userId || -1 } } },
-        { isPublic: true },
-      ],
+      OR: [{ isPublic: true }],
     },
   });
 }

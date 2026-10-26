@@ -1,0 +1,9 @@
+services:
+  linkwarden:
+    image: linkwarden-enterprise:local
+    build:
+      context: .
+      args:
+        SITE_TITLE: ${SITE_TITLE:-Linkwarden}
+        INSTANCE_VERSION: ${INSTANCE_VERSION:-}
+        DEFAULT_LANGUAGE: ${DEFAULT_LANGUAGE:-zh}

@@ -1,8 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ArchivedFormat } from "@linkwarden/types/global";
-import handler from "./view";
+import handler from "@/pages/api/v1/preserved/view";
 import { readFile } from "@linkwarden/filesystem";
 import { decodePreservedFormatToken } from "@/lib/api/preserved/createPreservedFormatUrl";
+import resolveAccessibleArchive from "@/lib/api/archives/resolveAccessibleArchive";
+
+vi.mock("@/lib/api/archives/resolveAccessibleArchive", () => ({
+  default: vi.fn(),
+}));
 
 vi.mock("@linkwarden/filesystem", () => ({
   readFile: vi.fn(),
@@ -45,7 +50,20 @@ const createMockResponse = () => {
 
 describe("/api/v1/preserved/view", () => {
   beforeEach(() => {
-    vi.stubEnv("NEXT_PUBLIC_USER_CONTENT_DOMAIN", "https://content.example.com");
+    vi.mocked(resolveAccessibleArchive).mockResolvedValue({
+      status: 200,
+      response: {
+        filePath: "archives/7/11.html",
+        collectionId: 7,
+        linkId: 11,
+        format: ArchivedFormat.monolith,
+        isPreview: false,
+      },
+    });
+    vi.stubEnv(
+      "NEXT_PUBLIC_USER_CONTENT_DOMAIN",
+      "https://content.example.com"
+    );
   });
 
   afterEach(() => {
@@ -187,6 +205,40 @@ describe("/api/v1/preserved/view", () => {
     );
 
     expect(state.statusCode).toBe(401);
-    expect(state.jsonBody).toEqual({ response: "Invalid archived format token." });
+    expect(state.jsonBody).toEqual({
+      response: "Invalid archived format token.",
+    });
+  });
+
+  it("rechecks a signed URL after collection permission has been revoked", async () => {
+    vi.mocked(decodePreservedFormatToken).mockResolvedValue({
+      scope: "preserved-format",
+      linkId: 11,
+      filePath: "archives/7/11.html",
+      format: ArchivedFormat.monolith,
+      userId: 9,
+      iat: 100,
+      exp: Math.floor(Date.now() / 1000) + 60,
+    } as any);
+    vi.mocked(resolveAccessibleArchive).mockResolvedValue({
+      status: 401,
+      response: "Access revoked.",
+    });
+    const { res, state } = createMockResponse();
+    await handler(
+      {
+        method: "GET",
+        query: { token: "abc" },
+        headers: { host: "content.example.com" },
+      } as any,
+      res
+    );
+    expect(state.statusCode).toBe(401);
+    expect(readFile).not.toHaveBeenCalled();
+    expect(resolveAccessibleArchive).toHaveBeenCalledWith({
+      linkId: 11,
+      format: ArchivedFormat.monolith,
+      userId: 9,
+    });
   });
 });

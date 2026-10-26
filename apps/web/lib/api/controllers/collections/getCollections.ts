@@ -1,6 +1,8 @@
 import { prisma } from "@linkwarden/prisma";
+import { getCollectionAccess } from "@/lib/api/collectionAccess";
 
 export default async function getCollection(userId: number) {
+  const access = await getCollectionAccess(userId);
   const [user, collectionsWithoutCount] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
@@ -8,12 +10,10 @@ export default async function getCollection(userId: number) {
     }),
     prisma.collection.findMany({
       where: {
-        OR: [
-          { ownerId: userId },
-          { members: { some: { user: { id: userId } } } },
-        ],
+        id: { in: Array.from(access.keys()) },
       },
       include: {
+        owner: { select: { id: true, name: true, username: true } },
         parent: {
           select: {
             id: true,
@@ -52,6 +52,11 @@ export default async function getCollection(userId: number) {
 
   const collections = collectionsWithoutCount.map((collection) => ({
     ...collection,
+    parent:
+      collection.parentId && !access.has(collection.parentId)
+        ? null
+        : collection.parent,
+    effectivePermission: access.get(collection.id),
     _count: { links: linkCountByCollectionId.get(collection.id) ?? 0 },
   }));
 

@@ -15,6 +15,7 @@ export default async function verifyUser({
   req,
   res,
 }: Props): Promise<User | null> {
+  res.setHeader("Cache-Control", "private, no-store");
   const token = await verifyToken({ req });
 
   if (typeof token === "string") {

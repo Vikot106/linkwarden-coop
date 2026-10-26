@@ -89,7 +89,7 @@ export default function CollectionCard({
           align="end"
           className="z-[30]"
         >
-          {permissions === true && (
+          {(permissions === true || permissions?.canUpdate) && (
             <DropdownMenuItem onSelect={() => setEditCollectionModal(true)}>
               <i className="bi-pencil-square" />
               {t("edit_collection_info")}
@@ -105,22 +105,27 @@ export default function CollectionCard({
 
           <DropdownMenuSeparator />
 
-          <DropdownMenuItem
-            onSelect={() => setDeleteCollectionModal(true)}
-            className="text-error"
-          >
-            {permissions === true ? (
-              <>
-                <i className="bi-trash" />
-                {t("delete_collection")}
-              </>
-            ) : (
-              <>
-                <i className="bi-box-arrow-left" />
-                {t("leave_collection")}
-              </>
-            )}
-          </DropdownMenuItem>
+          {(permissions === true ||
+            (!!collection.parentId && !!permissions?.canDelete) ||
+            collection.members.some((m) => m.userId === user?.id)) && (
+            <DropdownMenuItem
+              onSelect={() => setDeleteCollectionModal(true)}
+              className="text-error"
+            >
+              {permissions === true ||
+              (!!collection.parentId && !!permissions?.canDelete) ? (
+                <>
+                  <i className="bi-trash" />
+                  {t("delete_collection")}
+                </>
+              ) : (
+                <>
+                  <i className="bi-box-arrow-left" />
+                  {t("leave_collection")}
+                </>
+              )}
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
 

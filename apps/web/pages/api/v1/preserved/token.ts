@@ -50,6 +50,7 @@ export default async function handler(
 
     const url = await createPreservedFormatUrl({
       linkId,
+      userId,
       filePath,
       format: resolvedArchive.response.format,
     });

@@ -1,5 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import * as process from "process";
+import { getAnnouncement } from "@/lib/api/announcement";
+import { getDefaultLocale, getNewUserLocale } from "@/lib/shared/language";
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
   return res.status(200).json({ response: getEnvData() });
@@ -25,7 +27,11 @@ export const getEnvData = () => {
     MAX_FILE_BUFFER: Number(process.env.NEXT_PUBLIC_MAX_FILE_BUFFER) || null,
     USER_CONTENT_DOMAIN: process.env.NEXT_PUBLIC_USER_CONTENT_DOMAIN || null,
     AI_ENABLED: hasAiProvider || null,
-    INSTANCE_VERSION: process.env.version,
+    INSTANCE_VERSION: process.env.INSTANCE_VERSION || process.env.version,
+    SITE_TITLE: process.env.SITE_TITLE || "Linkwarden",
+    DEFAULT_LANGUAGE: getDefaultLocale(),
+    NEW_USER_DEFAULT_LANGUAGE: getNewUserLocale(),
+    ANNOUNCEMENT: getAnnouncement(),
     STRIPE_ENABLED:
       process.env.NEXT_PUBLIC_STRIPE === "true" ||
       Boolean(process.env.STRIPE_SECRET_KEY) ||

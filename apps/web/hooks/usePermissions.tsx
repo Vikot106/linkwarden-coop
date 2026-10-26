@@ -1,32 +1,24 @@
 import { Member } from "@linkwarden/types/global";
-import { useEffect, useState } from "react";
 import { useCollections } from "@linkwarden/router/collections";
 import { useUser } from "@linkwarden/router/user";
 
-export default function usePermissions(collectionId: number) {
+export default function usePermissions(
+  collectionId: number
+): Member | true | undefined {
   const { data: collections = [] } = useCollections();
-
   const { data: user } = useUser();
-
-  const [permissions, setPermissions] = useState<Member | true>();
-  useEffect(() => {
-    const collection = collections.find((e) => e.id === collectionId);
-
-    if (collection) {
-      let getPermission: Member | undefined = collection.members.find(
-        (e) => e.userId === user?.id
-      );
-
-      if (
-        getPermission?.canCreate === false &&
-        getPermission?.canUpdate === false &&
-        getPermission?.canDelete === false
-      )
-        getPermission = undefined;
-
-      setPermissions(user?.id === collection.ownerId || getPermission);
-    }
-  }, [user, collections, collectionId]);
-
-  return permissions;
+  const collection = collections.find((c) => c.id === collectionId);
+  if (!collection || !user) return undefined;
+  if (collection.ownerId === user.id) return true;
+  const access = collection.effectivePermission;
+  if (access)
+    return access.canCreate ||
+      access.canUpdate ||
+      access.canDelete ||
+      access.canManage
+      ? { ...access, userId: user.id, user }
+      : undefined;
+  return collection.members.find(
+    (m) => m.userId === user.id && (m.canCreate || m.canUpdate || m.canDelete)
+  );
 }

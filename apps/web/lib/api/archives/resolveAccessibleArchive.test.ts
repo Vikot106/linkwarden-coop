@@ -1,10 +1,14 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ArchivedFormat } from "@linkwarden/types/global";
 import resolveAccessibleArchive from "./resolveAccessibleArchive";
 import { prisma } from "@linkwarden/prisma";
+import getPermission from "@/lib/api/getPermission";
+
+vi.mock("@/lib/api/getPermission", () => ({ default: vi.fn() }));
 
 vi.mock("@linkwarden/prisma", () => ({
   prisma: {
+    user: { findUnique: vi.fn() },
     collection: {
       findFirst: vi.fn(),
     },
@@ -12,12 +16,19 @@ vi.mock("@linkwarden/prisma", () => ({
 }));
 
 describe("resolveAccessibleArchive", () => {
+  beforeEach(() => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      id: 7,
+      emailVerified: new Date(),
+    } as any);
+    vi.mocked(getPermission).mockResolvedValue(null);
+  });
   afterEach(() => {
     vi.clearAllMocks();
   });
 
   it("returns a resolved file path for an accessible owner archive", async () => {
-    vi.mocked(prisma.collection.findFirst).mockResolvedValue({
+    vi.mocked(getPermission).mockResolvedValue({
       id: 12,
     } as any);
 
@@ -27,20 +38,8 @@ describe("resolveAccessibleArchive", () => {
       userId: 7,
     });
 
-    expect(prisma.collection.findFirst).toHaveBeenCalledWith({
-      where: {
-        links: {
-          some: {
-            id: 55,
-          },
-        },
-        OR: [
-          { ownerId: 7 },
-          { members: { some: { userId: 7 } } },
-          { isPublic: true },
-        ],
-      },
-    });
+    expect(getPermission).toHaveBeenCalledWith({ userId: 7, linkId: 55 });
+    expect(prisma.collection.findFirst).not.toHaveBeenCalled();
     expect(result).toEqual({
       status: 200,
       response: {
@@ -71,11 +70,7 @@ describe("resolveAccessibleArchive", () => {
             id: 3,
           },
         },
-        OR: [
-          { ownerId: -1 },
-          { members: { some: { userId: -1 } } },
-          { isPublic: true },
-        ],
+        OR: [{ isPublic: true }],
       },
     });
     expect(result).toEqual({

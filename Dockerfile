@@ -36,6 +36,12 @@ RUN --mount=type=cache,sharing=locked,target=/root/.yarn/berry/cache \
 
 # Copy source and build
 COPY . .
+ARG SITE_TITLE=Linkwarden
+ARG INSTANCE_VERSION=
+ARG DEFAULT_LANGUAGE=zh
+ENV SITE_TITLE=${SITE_TITLE}
+ENV INSTANCE_VERSION=${INSTANCE_VERSION}
+ENV DEFAULT_LANGUAGE=${DEFAULT_LANGUAGE}
 RUN yarn prisma:generate && \
     yarn web:build
 

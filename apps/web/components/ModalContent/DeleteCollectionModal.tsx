@@ -28,27 +28,30 @@ export default function DeleteCollectionModal({
     setCollection(activeCollection);
   }, []);
 
+  const deleting =
+    permissions === true || (!!collection.parentId && !!permissions?.canDelete);
   const deleteCollection = useDeleteCollection({ toast, t });
 
   const submit = async () => {
     if (!collection) return null;
 
-    deleteCollection.mutateAsync(collection.id as number);
-
-    onClose();
-    router.push("/collections");
+    try {
+      await deleteCollection.mutateAsync(collection.id as number);
+      onClose();
+      router.push("/collections");
+    } catch {}
   };
 
   return (
     <Modal toggleModal={onClose}>
       <p className="text-xl font-thin text-red-500">
-        {permissions === true ? t("delete_collection") : t("leave_collection")}
+        {deleting ? t("delete_collection") : t("leave_collection")}
       </p>
 
       <Separator className="my-3" />
 
       <div className="flex flex-col gap-3">
-        {permissions === true ? (
+        {deleting ? (
           <>
             {t("collection_deletion_prompt")}
             <div role="alert" className="alert alert-warning">
@@ -65,7 +68,7 @@ export default function DeleteCollectionModal({
 
         <Button onClick={submit} variant="destructive" className="ml-auto">
           <i className="bi-trash text-xl"></i>
-          {permissions === true ? t("delete") : t("leave")}
+          {deleting ? t("delete") : t("leave")}
         </Button>
       </div>
     </Modal>

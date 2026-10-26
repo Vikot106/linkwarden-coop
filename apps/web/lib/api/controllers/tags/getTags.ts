@@ -1,3 +1,4 @@
+import getAccessibleCollectionIds from "@/lib/api/getAccessibleCollectionIds";
 import { prisma } from "@linkwarden/prisma";
 import { TagRequestQuery, TagSort } from "@linkwarden/types/global";
 import { Tag } from "@linkwarden/prisma/client";
@@ -61,18 +62,7 @@ export default async function getTags({
     orderBy = [{ links: { _count: "asc" } }, { id: "asc" }];
 
   if (userId) {
-    const memberCollections = await prisma.usersAndCollections.findMany({
-      where: {
-        userId,
-      },
-      select: {
-        collectionId: true,
-      },
-    });
-
-    const memberCollectionIds = memberCollections.map(
-      (memberCollection) => memberCollection.collectionId
-    );
+    const { memberCollectionIds } = await getAccessibleCollectionIds(userId);
 
     const tags = await withLinkCounts(
       await prisma.tag.findMany({

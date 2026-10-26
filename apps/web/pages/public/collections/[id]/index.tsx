@@ -110,7 +110,10 @@ export default function PublicCollections() {
       >
         {collection && (
           <Head>
-            <title>{collection.name} | Linkwarden</title>
+            <title>
+              {collection.name} |{" "}
+              {process.env.NEXT_PUBLIC_SITE_TITLE || "Linkwarden"}
+            </title>
             <meta
               property="og:title"
               content={`${collection.name} | Linkwarden`}

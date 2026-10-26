@@ -16,6 +16,7 @@ const usePinLink = () => {
     try {
       updateLink.mutateAsync({
         ...link,
+        pinOnly: true,
         pinnedBy: (isAlreadyPinned
           ? [{ id: undefined }]
           : [{ id: user?.id }]) as any,

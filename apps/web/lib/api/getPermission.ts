@@ -1,10 +1,7 @@
 import { prisma } from "@linkwarden/prisma";
+import { getCollectionAccess } from "./collectionAccess";
 
-type Props = {
-  userId: number;
-  collectionId?: number;
-  linkId?: number;
-};
+type Props = { userId: number; collectionId?: number; linkId?: number };
 
 export default async function getPermission({
   userId,
@@ -12,27 +9,36 @@ export default async function getPermission({
   linkId,
 }: Props) {
   if (linkId) {
-    const check = await prisma.collection.findFirst({
-      where: {
-        links: {
-          some: {
-            id: linkId,
-          },
-        },
-      },
-      include: { members: true },
+    const link = await prisma.link.findUnique({
+      where: { id: linkId },
+      select: { collectionId: true },
     });
-
-    return check;
-  } else if (collectionId) {
-    const check = await prisma.collection.findFirst({
-      where: {
-        id: collectionId,
-        OR: [{ ownerId: userId }, { members: { some: { userId } } }],
-      },
-      include: { members: true },
-    });
-
-    return check;
+    collectionId = link?.collectionId;
   }
+  if (!collectionId) return null;
+  const access = (await getCollectionAccess(userId)).get(collectionId);
+  if (!access) return null;
+  const collection = await prisma.collection.findUnique({
+    where: { id: collectionId },
+    include: { members: true },
+  });
+  if (!collection) return null;
+  // Effective member for existing link/archive controllers; never persisted.
+  return {
+    ...collection,
+    effectivePermission: access,
+    members: [
+      ...collection.members.filter((member) => member.userId !== userId),
+      {
+        userId,
+        collectionId,
+        canCreate: access.canCreate,
+        canUpdate: access.canUpdate,
+        canDelete: access.canDelete,
+        canManage: access.canManage,
+        createdAt: collection.createdAt,
+        updatedAt: collection.updatedAt,
+      },
+    ],
+  };
 }

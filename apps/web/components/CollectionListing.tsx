@@ -30,11 +30,16 @@ interface ExtendedTreeItem extends TreeItem {
   data: Collection;
 }
 
-const CollectionListing = () => {
+const CollectionListing = ({
+  collectionSubset,
+}: {
+  collectionSubset?: CollectionIncludingMembersAndLinkCount[];
+}) => {
   const { active: droppableActive } = useDndContext();
   const { t } = useTranslation();
   const updateCollection = useUpdateCollection();
-  const { data: collections = [], isLoading } = useCollections();
+  const { data: allCollections = [], isLoading } = useCollections();
+  const collections = collectionSubset ?? allCollections;
 
   const { data: user } = useUser();
   const updateUser = useUpdateUser();
@@ -57,52 +62,6 @@ const CollectionListing = () => {
   useEffect(() => {
     setTree(initialTree);
   }, [initialTree]);
-
-  useEffect(() => {
-    if (user?.username) {
-      // refetch();
-      if (
-        (!user.collectionOrder || user.collectionOrder.length === 0) &&
-        collections.length > 0
-      )
-        updateUser.mutate({
-          ...user,
-          collectionOrder: collections
-            .filter((e) => e.parentId === null)
-            .map((e) => e.id as number),
-        });
-      else {
-        const newCollectionOrder: number[] = [...(user.collectionOrder || [])];
-
-        // Start with collections that are in both account.collectionOrder and collections
-        const existingCollectionIds = collections.map((c) => c.id as number);
-        const filteredCollectionOrder = user.collectionOrder.filter((id: any) =>
-          existingCollectionIds.includes(id)
-        );
-
-        // Add new collections that are not in account.collectionOrder and meet the specific conditions
-        collections.forEach((collection) => {
-          if (
-            !filteredCollectionOrder.includes(collection.id as number) &&
-            (!collection.parentId || collection.ownerId === user.id)
-          ) {
-            filteredCollectionOrder.push(collection.id as number);
-          }
-        });
-
-        // check if the newCollectionOrder is the same as the old one
-        if (
-          JSON.stringify(newCollectionOrder) !==
-          JSON.stringify(user.collectionOrder)
-        ) {
-          updateUser.mutateAsync({
-            ...user,
-            collectionOrder: newCollectionOrder,
-          });
-        }
-      }
-    }
-  }, [user, collections]);
 
   const onExpand = (movedCollectionId: ItemId) => {
     setTree((currentTree) =>
@@ -257,7 +216,12 @@ const CollectionListing = () => {
 
     await updateUser.mutateAsync({
       ...user,
-      collectionOrder: flattenTreeIds(newTree),
+      collectionOrder: [
+        ...flattenTreeIds(newTree).map(Number),
+        ...(user?.collectionOrder ?? []).filter(
+          (id) => !collections.some((c) => c.id === id)
+        ),
+      ],
     });
   };
 
@@ -350,7 +314,21 @@ const renderItem = (
                 ></i>
               )}
 
-              <p className="truncate w-full text-xs">{collection.name}</p>
+              <p
+                className="truncate w-full text-xs"
+                title={[
+                  collection.owner?.username,
+                  ...(collection.effectivePermission?.sources ?? []),
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              >
+                {collection.name}
+              </p>
+              {collection.effectivePermission &&
+                !collection.effectivePermission.canUpdate && (
+                  <i className="bi-lock text-xs" aria-label="Read only" />
+                )}
 
               {collection.isPublic && (
                 <i
@@ -401,6 +379,7 @@ const buildTreeFromCollections = (
   tree?: TreeData,
   order?: number[]
 ): TreeData => {
+  collections = [...collections];
   if (order) {
     collections.sort((a: any, b: any) => {
       return order.indexOf(a.id) - order.indexOf(b.id);
@@ -432,6 +411,7 @@ const buildTreeFromCollections = (
         hasChildren: false,
         isExpanded: tree?.items[collection.id as number]?.isExpanded || false,
         data: {
+          ...collection,
           id: collection.id,
           parentId: collection.parentId,
           name: collection.name,

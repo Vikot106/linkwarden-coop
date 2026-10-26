@@ -11,6 +11,7 @@ export type PreservedFormatToken = JWT & {
   linkId: number;
   filePath: string;
   format: ArchivedFormat;
+  userId?: number;
   iat: number;
   exp: number;
 };
@@ -27,7 +28,9 @@ const isPreservedFormatToken = (
   token: JWT | null
 ): token is PreservedFormatToken => {
   const suffix =
-    typeof token?.format === "number" ? getSuffixFromFormat(token.format) : null;
+    typeof token?.format === "number"
+      ? getSuffixFromFormat(token.format)
+      : null;
 
   return (
     !!token &&
@@ -47,10 +50,12 @@ export default async function createPreservedFormatUrl({
   linkId,
   filePath,
   format,
+  userId,
 }: {
   linkId: number;
   filePath: string;
   format: ArchivedFormat;
+  userId?: number;
 }) {
   const userContentDomain = process.env.NEXT_PUBLIC_USER_CONTENT_DOMAIN;
   if (!userContentDomain) {
@@ -72,6 +77,7 @@ export default async function createPreservedFormatUrl({
       linkId,
       filePath,
       format,
+      userId,
       iat: now,
       exp: now + PRESERVED_FORMAT_TOKEN_TTL_SECONDS,
       jti: crypto.randomUUID(),

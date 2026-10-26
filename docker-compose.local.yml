@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: ${DEV_POSTGRES_IMAGE:-postgres:18.4-alpine}
+    environment:
+      POSTGRES_USER: linkwarden_dev
+      POSTGRES_DB: linkwarden_dev
+      POSTGRES_PASSWORD: ${DEV_POSTGRES_PASSWORD:?Run dev.cmd to initialize the development configuration}
+    ports:
+      - "127.0.0.1:${DEV_DB_PORT:-55433}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U linkwarden_dev -d linkwarden_dev"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  postgres-data:

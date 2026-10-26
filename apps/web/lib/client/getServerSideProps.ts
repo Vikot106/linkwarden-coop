@@ -1,13 +1,16 @@
 import { GetServerSideProps } from "next";
 import { serverSideTranslations } from "next-i18next/serverSideTranslations";
-import { i18n } from "next-i18next.config";
+import { getDefaultLocale, supportedLocales } from "@/lib/shared/language";
 import { getToken } from "next-auth/jwt";
 import { prisma } from "@linkwarden/prisma";
 
-const getServerSideProps: GetServerSideProps = async (ctx) => {
-  const acceptLanguageHeader = ctx.req.headers["accept-language"];
-  const availableLanguages = i18n.locales;
-
+export const getPageTranslations = async (
+  ctx: Parameters<GetServerSideProps>[0]
+) => {
+  let locale =
+    ctx.locale && supportedLocales.includes(ctx.locale)
+      ? ctx.locale
+      : getDefaultLocale();
   const token = await getToken({ req: ctx.req });
 
   if (token) {
@@ -17,41 +20,16 @@ const getServerSideProps: GetServerSideProps = async (ctx) => {
       },
     });
 
-    if (user) {
-      return {
-        props: {
-          ...(await serverSideTranslations(user.locale ?? "en", ["common"])),
-        },
-      };
+    if (user && supportedLocales.includes(user.locale)) {
+      locale = user.locale;
     }
   }
 
-  const acceptedLanguages = acceptLanguageHeader
-    ?.split(",")
-    .map((lang) => lang.split(";")[0]);
-
-  let bestMatch = acceptedLanguages?.find((lang) =>
-    availableLanguages.includes(lang)
-  );
-
-  if (!bestMatch) {
-    acceptedLanguages?.some((acceptedLang) => {
-      const partialMatch = availableLanguages.find((lang) =>
-        lang.startsWith(acceptedLang)
-      );
-      if (partialMatch) {
-        bestMatch = partialMatch;
-        return true;
-      }
-      return false;
-    });
-  }
-
-  return {
-    props: {
-      ...(await serverSideTranslations(bestMatch ?? "en", ["common"])),
-    },
-  };
+  return serverSideTranslations(locale, ["common"]);
 };
+
+const getServerSideProps: GetServerSideProps = async (ctx) => ({
+  props: await getPageTranslations(ctx),
+});
 
 export default getServerSideProps;

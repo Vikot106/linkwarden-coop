@@ -1,34 +1,34 @@
 import { Member } from "@linkwarden/types/global";
-import { useEffect, useState } from "react";
 import { useCollections } from "@linkwarden/router/collections";
 import { useUser } from "@linkwarden/router/user";
 
-export default function useCollectivePermissions(collectionIds: number[]) {
+export default function useCollectivePermissions(
+  collectionIds: number[]
+): Member | true | undefined {
   const { data: collections = [] } = useCollections();
-
   const { data: user } = useUser();
-
-  const [permissions, setPermissions] = useState<Member | true>();
-  useEffect(() => {
-    for (const collectionId of collectionIds) {
-      const collection = collections.find((e) => e.id === collectionId);
-
-      if (collection) {
-        let getPermission: Member | undefined = collection.members.find(
-          (e) => e.userId === user?.id
-        );
-
-        if (
-          getPermission?.canCreate === false &&
-          getPermission?.canUpdate === false &&
-          getPermission?.canDelete === false
-        )
-          getPermission = undefined;
-
-        setPermissions(user?.id === collection.ownerId || getPermission);
-      }
-    }
-  }, [user, collections, collectionIds]);
-
-  return permissions;
+  if (!user || !collectionIds.length) return undefined;
+  const grants = collectionIds.map((id) => {
+    const c = collections.find((item) => item.id === id);
+    if (c?.ownerId === user.id)
+      return {
+        canCreate: true,
+        canUpdate: true,
+        canDelete: true,
+        canManage: true,
+      };
+    return (
+      c?.effectivePermission ?? c?.members.find((m) => m.userId === user.id)
+    );
+  });
+  const permissions = {
+    userId: user.id,
+    user,
+    canCreate: grants.every((g) => g?.canCreate),
+    canUpdate: grants.every((g) => g?.canUpdate),
+    canDelete: grants.every((g) => g?.canDelete),
+  };
+  return permissions.canCreate || permissions.canUpdate || permissions.canDelete
+    ? permissions
+    : undefined;
 }

@@ -14,6 +14,7 @@ type OptionalExcluding<T, TRequired extends keyof T> = Partial<T> &
 export interface LinkIncludingShortenedCollectionAndTags
   extends Omit<
     Link,
+    | "version"
     | "id"
     | "createdAt"
     | "collectionId"
@@ -30,6 +31,8 @@ export interface LinkIncludingShortenedCollectionAndTags
   pinnedBy?: {
     id: number;
   }[];
+  pinOnly?: boolean;
+  version?: number;
   updatedAt?: string;
   collection: OptionalExcluding<Collection, "name" | "ownerId">;
 }
@@ -40,6 +43,7 @@ export interface Member {
   canCreate: boolean;
   canUpdate: boolean;
   canDelete: boolean;
+  canManage?: boolean;
   user: OptionalExcluding<User, "username" | "name" | "id">;
 }
 
@@ -51,6 +55,15 @@ export interface CollectionIncludingMembersAndLinkCount
   updatedAt?: string;
   _count?: { links: number };
   members: Member[];
+  owner?: Pick<User, "id" | "name" | "username">;
+  effectivePermission?: {
+    canCreate: boolean;
+    canUpdate: boolean;
+    canDelete: boolean;
+    canManage: boolean;
+    scope: "PERSONAL" | "DEPARTMENT" | "COMPANY";
+    sources: string[];
+  };
 }
 
 export interface TagIncludingLinkCount extends Tag {

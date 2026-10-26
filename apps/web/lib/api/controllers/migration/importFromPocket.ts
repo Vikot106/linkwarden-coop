@@ -33,9 +33,9 @@ export default async function importFromPocket(
     };
   }
 
-  await prisma
+  const imported = await prisma
     .$transaction(
-      async () => {
+      async (prisma) => {
         const newCollection = await prisma.collection.create({
           data: {
             owner: {
@@ -102,7 +102,15 @@ export default async function importFromPocket(
       },
       { timeout: 30000 }
     )
-    .catch((err) => console.log(err));
+    .then(
+      () => true,
+      () => false
+    );
 
+  if (!imported)
+    return {
+      response: "Import failed. No bookmark changes were saved.",
+      status: 500,
+    };
   return { response: "Success.", status: 200 };
 }

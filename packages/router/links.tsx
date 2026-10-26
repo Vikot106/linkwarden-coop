@@ -836,9 +836,13 @@ const useGetLink = ({
       placeholderData: {} as LinkIncludingShortenedCollectionAndTags,
       enabled: id != null && enabled,
       refetchInterval: (query) =>
-        isPreservationPending(query.state.data)
-          ? PRESERVATION_POLL_INTERVAL
-          : false,
+        !isPublicRoute
+          ? 2000
+          : isPreservationPending(query.state.data)
+            ? PRESERVATION_POLL_INTERVAL
+            : false,
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: "always",
       queryFn: async () => {
         const base = auth?.instance ?? "";
         const route = isPublicRoute
@@ -1094,7 +1098,7 @@ const useBulkEditLinks = () => {
       newData,
       removePreviousTags,
     }: {
-      links: Pick<LinkIncludingShortenedCollectionAndTags, "id">[];
+      links: Pick<LinkIncludingShortenedCollectionAndTags, "id" | "version">[];
       newData: Pick<
         LinkIncludingShortenedCollectionAndTags,
         "tags" | "collectionId"

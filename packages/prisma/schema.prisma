@@ -224,7 +224,7 @@ model Link {
   description     String      @default("")
   highlight       Highlight[]
   pinnedBy        User[]      @relation("PinnedLinks")
-  createdBy       User?       @relation("CreatedLinks", fields: [createdById], references: [id], onDelete: Cascade)
+  createdBy       User?       @relation("CreatedLinks", fields: [createdById], references: [id], onDelete: SetNull)
   createdById     Int?
   collection      Collection  @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   collectionId    Int

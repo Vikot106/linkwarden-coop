@@ -37,9 +37,9 @@ export default async function importFromOmnivore(
     };
   }
 
-  await prisma
+  const imported = await prisma
     .$transaction(
-      async () => {
+      async (prisma) => {
         const newCollection = await prisma.collection.create({
           data: {
             owner: {
@@ -110,10 +110,15 @@ export default async function importFromOmnivore(
       },
       { timeout: 30000 }
     )
-    .catch((err) => {
-      console.error("Error during Omnivore import:", err);
-      throw err;
-    });
+    .then(
+      () => true,
+      () => false
+    );
 
+  if (!imported)
+    return {
+      response: "Import failed. No bookmark changes were saved.",
+      status: 500,
+    };
   return { response: "Success.", status: 200 };
 }

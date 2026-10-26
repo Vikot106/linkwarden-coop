@@ -1,21 +1,7 @@
 import getAccessibleCollectionIds from "@/lib/api/getAccessibleCollectionIds";
 import { prisma } from "@linkwarden/prisma";
 import { TagRequestQuery, TagSort } from "@linkwarden/types/global";
-import { Tag } from "@linkwarden/prisma/client";
-
-async function withLinkCounts<T extends Tag>(
-  tags: T[]
-): Promise<(T & { _count: { links: number } })[]> {
-  if (tags.length === 0) return [];
-
-  const counts = await prisma.$transaction(
-    tags.map((tag) =>
-      prisma.link.count({ where: { tags: { some: { id: tag.id } } } })
-    )
-  );
-
-  return tags.map((tag, i) => ({ ...tag, _count: { links: counts[i] } }));
-}
+import { Prisma } from "@linkwarden/prisma/client";
 
 export default async function getTags({
   userId,
@@ -26,115 +12,103 @@ export default async function getTags({
   collectionId?: number;
   query?: TagRequestQuery;
 }) {
-  const normalizeSearch = (value?: string) => {
-    if (!value) return undefined;
-
+  let search = query.search?.trim();
+  if (search) {
     try {
-      return decodeURIComponent(value).trim() || undefined;
-    } catch {
-      return value.trim() || undefined;
-    }
-  };
-
-  const paginationTakeCount = Number(process.env.PAGINATION_TAKE_COUNT) || 50;
-  const POSTGRES_IS_ENABLED =
-    process.env.DATABASE_URL?.startsWith("postgresql");
-  const search = normalizeSearch(query.search);
-  const searchCondition = search
+      search = decodeURIComponent(search).trim();
+    } catch {}
+  }
+  const searchCondition: Prisma.TagWhereInput = search
     ? {
         name: {
           contains: search,
-          mode: POSTGRES_IS_ENABLED ? ("insensitive" as const) : undefined,
+          mode: process.env.DATABASE_URL?.startsWith("postgresql")
+            ? "insensitive"
+            : undefined,
         },
       }
-    : undefined;
-
-  let orderBy: any[] = [{ id: "desc" }];
-
+    : {};
+  const take = Number(process.env.PAGINATION_TAKE_COUNT) || 50;
+  let orderBy: Prisma.TagOrderByWithRelationInput[] = [{ id: "desc" }];
   if (query.sort === TagSort.DateOldestFirst) orderBy = [{ id: "asc" }];
   else if (query.sort === TagSort.NameAZ)
     orderBy = [{ name: "asc" }, { id: "asc" }];
   else if (query.sort === TagSort.NameZA)
     orderBy = [{ name: "desc" }, { id: "desc" }];
-  else if (query.sort === TagSort.LinkCountHighLow)
-    orderBy = [{ links: { _count: "desc" } }, { id: "desc" }];
-  else if (query.sort === TagSort.LinkCountLowHigh)
-    orderBy = [{ links: { _count: "asc" } }, { id: "asc" }];
 
   if (userId) {
-    const { memberCollectionIds } = await getAccessibleCollectionIds(userId);
-
-    const tags = await withLinkCounts(
-      await prisma.tag.findMany({
-        take: paginationTakeCount,
-        skip: query.cursor ? 1 : undefined,
-        cursor: query.cursor ? { id: query.cursor } : undefined,
-        where: {
-          AND: [
-            ...(searchCondition ? [searchCondition] : []),
-            {
-              OR: [
-                { ownerId: userId }, // Tags owned by the user
-                ...(memberCollectionIds.length > 0
-                  ? [
-                      {
-                        links: {
-                          some: {
-                            collectionId: {
-                              in: memberCollectionIds,
-                            },
-                          },
-                        },
-                      },
-                    ]
-                  : []),
-              ],
-            },
-          ],
-        },
-        orderBy,
-      })
-    );
-
-    return {
-      data: {
-        tags,
-        nextCursor:
-          tags.length === paginationTakeCount ? tags[tags.length - 1].id : null,
-      },
-      statusCode: 200,
-      success: true,
-      message: "Success",
-    };
-  } else if (collectionId) {
-    const tags = await withLinkCounts(
-      await prisma.tag.findMany({
-        where: {
-          AND: [
-            ...(searchCondition ? [searchCondition] : []),
-            {
-              links: {
-                some: {
-                  collectionId,
-                },
+    const { memberCollectionIds, accessibleCollectionIds } =
+      await getAccessibleCollectionIds(userId);
+    const sortByCount =
+      query.sort === TagSort.LinkCountHighLow ||
+      query.sort === TagSort.LinkCountLowHigh;
+    const matching = await prisma.tag.findMany({
+      take: sortByCount ? undefined : take,
+      skip: !sortByCount && query.cursor ? 1 : undefined,
+      cursor: !sortByCount && query.cursor ? { id: query.cursor } : undefined,
+      where: {
+        AND: [
+          searchCondition,
+          {
+            OR: [
+              { ownerId: userId },
+              {
+                links: { some: { collectionId: { in: memberCollectionIds } } },
               },
-            },
-          ],
+            ],
+          },
+        ],
+      },
+      include: {
+        _count: {
+          select: {
+            links: { where: { collectionId: { in: accessibleCollectionIds } } },
+          },
         },
-        orderBy: [{ name: "asc" }, { id: "asc" }],
-      })
-    );
-
+      },
+      orderBy,
+    });
+    // Prisma cannot sort by a filtered relation count. Sort only authorized counts
+    // before applying the cursor; private links never influence the public order.
+    let tags = matching;
+    if (sortByCount) {
+      matching.sort(
+        (a, b) =>
+          (query.sort === TagSort.LinkCountHighLow ? -1 : 1) *
+            (a._count.links - b._count.links) || b.id - a.id
+      );
+      const cursorIndex = query.cursor
+        ? matching.findIndex((tag) => tag.id === query.cursor)
+        : -1;
+      tags =
+        query.cursor && cursorIndex < 0
+          ? []
+          : matching.slice(cursorIndex + 1, cursorIndex + 1 + take);
+    }
     return {
       data: {
         tags,
+        nextCursor: tags.length === take ? tags[tags.length - 1].id : null,
       },
       statusCode: 200,
       success: true,
       message: "Success",
     };
   }
-
+  if (collectionId) {
+    const linksWhere = { collectionId, collection: { isPublic: true } };
+    const tags = await prisma.tag.findMany({
+      where: { AND: [searchCondition, { links: { some: linksWhere } }] },
+      include: { _count: { select: { links: { where: linksWhere } } } },
+      orderBy: [{ name: "asc" }, { id: "asc" }],
+    });
+    return {
+      data: { tags },
+      statusCode: 200,
+      success: true,
+      message: "Success",
+    };
+  }
   return {
     data: { tags: [] },
     statusCode: 400,

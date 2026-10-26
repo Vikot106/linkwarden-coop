@@ -33,11 +33,15 @@ const Page: NextPageWithLayout = () => {
   const client = useQueryClient();
   const { data: groups = [], error } = useQuery({
     queryKey: ["enterprise-groups"],
+    refetchInterval: 2000,
+    refetchOnReconnect: "always",
     enabled: isAdmin,
     queryFn: () => enterpriseRequest<Group[]>("/api/v1/user-groups"),
   });
   const { data: users = [] } = useQuery({
     queryKey: ["enterprise-users"],
+    refetchInterval: 2000,
+    refetchOnReconnect: "always",
     enabled: isAdmin,
     queryFn: () => enterpriseRequest<UserOption[]>("/api/v1/users"),
   });

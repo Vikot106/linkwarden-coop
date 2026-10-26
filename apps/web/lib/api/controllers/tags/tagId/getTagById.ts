@@ -5,7 +5,8 @@ export default async function getTagById(userId: number, tagId: number) {
   if (!tagId)
     return { response: "Please choose a valid name for the tag.", status: 401 };
 
-  const { memberCollectionIds } = await getAccessibleCollectionIds(userId);
+  const { memberCollectionIds, accessibleCollectionIds } =
+    await getAccessibleCollectionIds(userId);
 
   const tag = await prisma.tag.findFirst({
     where: {
@@ -24,7 +25,7 @@ export default async function getTagById(userId: number, tagId: number) {
     include: {
       _count: {
         select: {
-          links: true,
+          links: { where: { collectionId: { in: accessibleCollectionIds } } },
         },
       },
     },

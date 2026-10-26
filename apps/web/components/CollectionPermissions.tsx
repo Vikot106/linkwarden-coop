@@ -37,10 +37,14 @@ export default function CollectionPermissions({
   const url = `/api/v1/collections/${collection.id}/permissions`;
   const { data, error } = useQuery({
     queryKey: ["collection-permissions", collection.id],
+    refetchInterval: 2000,
+    refetchOnReconnect: "always",
     queryFn: () => enterpriseRequest<Grants>(url),
   });
   const { data: groups = [] } = useQuery({
     queryKey: ["group-catalog"],
+    refetchInterval: 2000,
+    refetchOnReconnect: "always",
     queryFn: () =>
       enterpriseRequest<{ id: number; name: string }[]>(
         "/api/v1/user-groups/catalog"

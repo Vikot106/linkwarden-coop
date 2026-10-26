@@ -2,6 +2,8 @@
 
 本定制版在原项目上增加企业用户组、收藏夹授权和自动展示。当前交付第一阶段 MVP，并加入基于轮询的同步和链接版本冲突检测。原有用户、收藏夹、链接和直接共享记录由增量迁移保留。
 
+最新逐项状态、已修复缺陷与剩余验收事项见[企业版需求核对记录](requirements-audit.md)。当前仍有未实现的管理流程和第二、三阶段功能。
+
 ## 当前功能
 
 - 系统管理员创建、修改、删除用户组，批量加入和移除成员；一个用户可属于多个组。
@@ -87,7 +89,7 @@ docker compose -f docker-compose.yml -f docker-compose.enterprise.yml up -d --bu
 
 该覆盖文件使用本地 `linkwarden-enterprise:local` 镜像。原版 `docker-compose.yml` 仍使用官方镜像；单独启动原版配置不会部署定制功能。现有 Docker 启动命令会在启动 Web/Worker 前执行 Prisma Migration。
 
-本次新增迁移为 `20261026000000_enterprise_groups`，只增加枚举、表、字段及索引。原收藏夹默认为 `PERSONAL`，旧直接成员的 `canManage` 默认为 false，链接 `version` 从 0 开始。不要对已有库运行 `prisma migrate reset` 或以 `db push` 代替版本迁移。
+企业功能迁移为 `20261026000000_enterprise_groups`，增加枚举、表、字段及索引。原收藏夹默认为 `PERSONAL`，旧直接成员的 `canManage` 默认为 false，链接 `version` 从 0 开始。后续迁移 `20261026010000_preserve_shared_contributions` 将链接作者外键改为删除用户时清空作者，保留其在其他人收藏夹中的贡献。当前共 101 个迁移。不要对已有库运行 `prisma migrate reset` 或以 `db push` 代替版本迁移。
 
 非 Docker 环境先安装现有依赖，再运行：
 
@@ -123,7 +125,7 @@ docker stop linkwarden-enterprise-test
 
 ## 后续阶段
 
-下一阶段包括 SSE/WebSocket 推送、授权及操作审计、部门管理员的组成员管理委派、收藏夹批量授权、收藏夹属性的并发冲突保护，以及容量和安全专项测试。可选企业集成阶段再接入身份提供商组织同步和离职自动撤权。
+下一阶段包括 SSE/WebSocket 推送、授权及操作审计、部门管理员的组成员管理委派、资源所有权移交、收藏夹批量授权，以及容量和安全专项测试。收藏夹属性并发冲突保护已通过 `updatedAt` 条件更新补齐；授权记录自身的冲突提示仍需完善。可选企业集成阶段再接入身份提供商组织同步和离职自动撤权。
 
 ## 跟随上游升级
 

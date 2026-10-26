@@ -1,10 +1,13 @@
 import { prisma } from "@linkwarden/prisma";
+import { Prisma } from "@linkwarden/prisma/client";
 import getPermission from "@/lib/api/getPermission";
 import getCollectionById from "./getCollectionById";
 import {
   UpdateCollectionSchema,
   UpdateCollectionSchemaType,
 } from "@linkwarden/lib/schemaValidation";
+
+class InvalidCollectionMove extends Error {}
 
 export default async function updateCollection(
   userId: number,
@@ -104,49 +107,100 @@ export default async function updateCollection(
       response: "Change this root collection to personal before moving it.",
       status: 400,
     };
-  await prisma.$transaction(async (tx) => {
-    if (data.propagateToSubcollections) {
-      // Replace old copied direct grants with dynamic inheritance from this collection.
-      const descendants: number[] = [];
-      const visited = new Set([collectionId]);
-      let frontier = [collectionId];
-      while (frontier.length) {
-        const children = await tx.collection.findMany({
-          where: { parentId: { in: frontier } },
-          select: { id: true },
-        });
-        frontier = children.map((c) => c.id).filter((id) => !visited.has(id));
-        frontier.forEach((id) => {
-          visited.add(id);
-          descendants.push(id);
+  if (collection.effectivePermission.shared && data.updatedAt === undefined)
+    return {
+      response:
+        "Reload this collection before editing; a revision is required for shared content.",
+      status: 409,
+    };
+  const expectedUpdatedAt = data.updatedAt
+    ? new Date(data.updatedAt)
+    : collection.updatedAt;
+  try {
+    await prisma.$transaction(async (tx) => {
+      if (moving && nextParent) {
+        // Serialize tree moves, then validate against the committed parent chain.
+        // Without the lock, simultaneous A -> B and B -> A can create a cycle.
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(762341901)`;
+        const seen = new Set([collectionId]);
+        let current: number | null = nextParent;
+        while (current) {
+          if (seen.has(current))
+            throw new InvalidCollectionMove(
+              "A collection cannot be moved inside itself."
+            );
+          seen.add(current);
+          const ancestor: { parentId: number | null } | null =
+            await tx.collection.findUnique({
+              where: { id: current },
+              select: { parentId: true },
+            });
+          if (!ancestor)
+            throw new InvalidCollectionMove(
+              "The target collection no longer exists."
+            );
+          current = ancestor.parentId;
+        }
+      }
+      await tx.collection.update({
+        where: { id: collectionId, updatedAt: expectedUpdatedAt },
+        data: {
+          name: data.name.trim(),
+          description: data.description,
+          color: data.color,
+          icon: data.icon,
+          iconWeight: data.iconWeight,
+          isPublic: data.isPublic,
+          parentId: nextParent,
+          updatedAt: new Date(
+            Math.max(Date.now(), collection.updatedAt.getTime() + 1)
+          ),
+        },
+      });
+      if (data.propagateToSubcollections) {
+        // Replace old copied direct grants with dynamic inheritance from this collection.
+        const descendants: number[] = [];
+        const visited = new Set([collectionId]);
+        let frontier = [collectionId];
+        while (frontier.length) {
+          const children = await tx.collection.findMany({
+            where: { parentId: { in: frontier } },
+            select: { id: true },
+          });
+          frontier = children.map((c) => c.id).filter((id) => !visited.has(id));
+          frontier.forEach((id) => {
+            visited.add(id);
+            descendants.push(id);
+          });
+        }
+        await tx.usersAndCollections.deleteMany({
+          where: { collectionId: { in: descendants } },
         });
       }
-      await tx.usersAndCollections.deleteMany({
-        where: { collectionId: { in: descendants } },
+      if (grantsChanged) {
+        await tx.usersAndCollections.deleteMany({ where: { collectionId } });
+        await tx.usersAndCollections.createMany({
+          data: members.map((m) => ({ ...m, collectionId })),
+        });
+      }
+      await tx.link.updateMany({
+        where: { collectionId },
+        data: { indexVersion: null },
       });
-    }
-    if (grantsChanged) {
-      await tx.usersAndCollections.deleteMany({ where: { collectionId } });
-      await tx.usersAndCollections.createMany({
-        data: members.map((m) => ({ ...m, collectionId })),
-      });
-    }
-    await tx.collection.update({
-      where: { id: collectionId },
-      data: {
-        name: data.name.trim(),
-        description: data.description,
-        color: data.color,
-        icon: data.icon,
-        iconWeight: data.iconWeight,
-        isPublic: data.isPublic,
-        parentId: nextParent,
-      },
     });
-    await tx.link.updateMany({
-      where: { collectionId },
-      data: { indexVersion: null },
-    });
-  });
+  } catch (error) {
+    if (error instanceof InvalidCollectionMove)
+      return { response: error.message, status: 400 };
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2025"
+    )
+      return {
+        response:
+          "This collection was changed by another user. Reload it before saving.",
+        status: 409,
+      };
+    throw error;
+  }
   return getCollectionById(userId, collectionId);
 }

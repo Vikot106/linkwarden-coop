@@ -24,9 +24,9 @@ export default async function importFromLinkwarden(
     };
   }
 
-  await prisma
+  const imported = await prisma
     .$transaction(
-      async () => {
+      async (prisma) => {
         // Import collections
         for (const e of data.collections) {
           e.name = e.name.trim();
@@ -99,7 +99,7 @@ export default async function importFromLinkwarden(
               },
             });
             // Import pinnedLinks
-            data?.pinnedLinks.forEach(async (pinnedLink) => {
+            for (const pinnedLink of data.pinnedLinks ?? []) {
               if (pinnedLink.url === newLink.url) {
                 await prisma.link.update({
                   where: {
@@ -110,13 +110,21 @@ export default async function importFromLinkwarden(
                   },
                 });
               }
-            });
+            }
           }
         }
       },
       { timeout: 30000 }
     )
-    .catch((err) => console.log(err));
+    .then(
+      () => true,
+      () => false
+    );
 
+  if (!imported)
+    return {
+      response: "Import failed. No bookmark changes were saved.",
+      status: 500,
+    };
   return { response: "Success.", status: 200 };
 }

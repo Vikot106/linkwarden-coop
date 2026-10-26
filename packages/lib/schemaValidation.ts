@@ -223,6 +223,7 @@ export type PostCollectionSchemaType = z.infer<typeof PostCollectionSchema>;
 
 export const UpdateCollectionSchema = z.object({
   id: z.number(),
+  updatedAt: z.union([z.string().datetime(), z.date()]).optional(),
   name: z.string().trim().max(2048),
   description: z.string().trim().max(2048).optional(),
   color: z.string().trim().max(50).optional(),

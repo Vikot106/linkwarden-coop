@@ -1,8 +1,23 @@
 import { prisma } from "@linkwarden/prisma";
+import { Prisma } from "@linkwarden/prisma/client";
 import getPermission from "@/lib/api/getPermission";
-import { UsersAndCollections } from "@linkwarden/prisma/client";
 import { removeFolder } from "@linkwarden/filesystem";
 import { meiliClient } from "@linkwarden/lib/meilisearchClient";
+
+async function clearCollectionOrders(
+  tx: Prisma.TransactionClient,
+  collectionIds: number[]
+) {
+  const ids = Prisma.join(collectionIds);
+  await tx.$executeRaw`
+    UPDATE "User"
+    SET "collectionOrder" = ARRAY(
+      SELECT item FROM unnest("collectionOrder") AS item
+      WHERE item <> ALL(ARRAY[${ids}]::integer[])
+    )
+    WHERE "collectionOrder" && ARRAY[${ids}]::integer[]
+  `;
+}
 
 export default async function deleteCollection(
   userId: number,
@@ -10,24 +25,14 @@ export default async function deleteCollection(
 ) {
   if (!collectionId)
     return { response: "Please choose a valid collection.", status: 401 };
+  const collection = await getPermission({ userId, collectionId });
+  if (!collection)
+    return { response: "Collection is not accessible.", status: 401 };
 
-  const collectionIsAccessible = await getPermission({
-    userId,
-    collectionId,
-  });
-
-  const memberHasAccess = collectionIsAccessible?.members.some(
-    (e: UsersAndCollections) => e.userId === userId
-  );
-
-  const canDeleteChild =
-    !!collectionIsAccessible?.parentId &&
-    !!collectionIsAccessible?.effectivePermission.canDelete;
-  if (
-    collectionIsAccessible?.ownerId !== userId &&
-    !canDeleteChild &&
-    memberHasAccess
-  ) {
+  const deleting =
+    collection.ownerId === userId ||
+    (!!collection.parentId && collection.effectivePermission.canDelete);
+  if (!deleting) {
     const direct = await prisma.usersAndCollections.findUnique({
       where: { userId_collectionId: { userId, collectionId } },
     });
@@ -37,193 +42,65 @@ export default async function deleteCollection(
           "This collection is assigned by a group or the company. Contact its manager.",
         status: 403,
       };
-    // Remove relation/Leave collection
-    const deletedUsersAndCollectionsRelation =
-      await prisma.usersAndCollections.delete({
-        where: {
-          userId_collectionId: {
-            userId: userId,
-            collectionId: collectionId,
-          },
-        },
+    const relation = await prisma.$transaction(async (tx) => {
+      const removed = await tx.usersAndCollections.delete({
+        where: { userId_collectionId: { userId, collectionId } },
       });
-
-    await Promise.all([
-      removeFromOrders(userId, collectionId),
-      updateDashboardSectionLayout(userId, collectionId),
-    ]);
-
-    await prisma.link.updateMany({
-      where: {
-        collectionId,
-      },
-      data: {
-        indexVersion: null,
-      },
-    });
-
-    return { response: deletedUsersAndCollectionsRelation, status: 200 };
-  } else if (collectionIsAccessible?.ownerId !== userId && !canDeleteChild) {
-    return { response: "Collection is not accessible.", status: 401 };
-  }
-
-  const deletedCollection = await prisma.$transaction(async () => {
-    await deleteSubCollections(collectionId);
-
-    await prisma.usersAndCollections.deleteMany({
-      where: {
-        collection: {
-          id: collectionId,
-        },
-      },
-    });
-
-    await removeFolder({ filePath: `archives/${collectionId}` });
-    await removeFolder({ filePath: `archives/preview/${collectionId}` });
-
-    await Promise.all([
-      removeFromOrders(userId, collectionId),
-      updateDashboardSectionLayout(userId, collectionId),
-    ]);
-
-    const links = await prisma.link.findMany({
-      where: {
-        collectionId: collectionId,
-      },
-      select: {
-        id: true,
-      },
-    });
-
-    const linkIds = links.map((link) => link.id);
-
-    await meiliClient?.index("links").deleteDocuments(linkIds);
-
-    await prisma.link.deleteMany({
-      where: {
-        collection: {
-          id: collectionId,
-        },
-      },
-    });
-
-    const collection = await prisma.collection.delete({
-      where: {
-        id: collectionId,
-      },
-    });
-
-    return collection;
-  });
-
-  return { response: deletedCollection, status: 200 };
-}
-
-async function deleteSubCollections(collectionId: number) {
-  const subCollections = await prisma.collection.findMany({
-    where: { parentId: collectionId },
-  });
-
-  for (const subCollection of subCollections) {
-    await deleteSubCollections(subCollection.id);
-
-    await prisma.usersAndCollections.deleteMany({
-      where: {
-        collection: {
-          id: subCollection.id,
-        },
-      },
-    });
-
-    const links = await prisma.link.findMany({
-      where: {
-        collectionId: subCollection.id,
-      },
-      select: {
-        id: true,
-      },
-    });
-
-    const linkIds = links.map((link) => link.id);
-
-    await meiliClient?.index("links").deleteDocuments(linkIds);
-
-    await prisma.link.deleteMany({
-      where: {
-        collection: {
-          id: subCollection.id,
-        },
-      },
-    });
-
-    await prisma.collection.delete({
-      where: { id: subCollection.id },
-    });
-
-    await removeFolder({ filePath: `archives/${subCollection.id}` });
-    await removeFolder({ filePath: `archives/preview/${subCollection.id}` });
-  }
-}
-
-async function removeFromOrders(userId: number, collectionId: number) {
-  const userCollectionOrder = await prisma.user.findUnique({
-    where: {
-      id: userId,
-    },
-    select: {
-      collectionOrder: true,
-    },
-  });
-
-  if (userCollectionOrder)
-    await prisma.user.update({
-      where: {
-        id: userId,
-      },
-      data: {
-        collectionOrder: {
-          set: userCollectionOrder.collectionOrder.filter(
-            (e: number) => e !== collectionId
+      const user = await tx.user.findUniqueOrThrow({
+        where: { id: userId },
+        select: { collectionOrder: true },
+      });
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          collectionOrder: user.collectionOrder.filter(
+            (id) => id !== collectionId
           ),
         },
-      },
+      });
+      await tx.dashboardSection.deleteMany({ where: { userId, collectionId } });
+      return removed;
     });
-}
+    return { response: relation, status: 200 };
+  }
 
-async function updateDashboardSectionLayout(
-  userId: number,
-  collectionId: number
-) {
-  const dashboardSection = await prisma.dashboardSection.findFirst({
-    where: {
-      userId,
-      collectionId,
-    },
+  const deleted = await prisma.$transaction(async (tx) => {
+    const subtree = await tx.$queryRaw<{ id: number }[]>`
+      WITH RECURSIVE subtree AS (
+        SELECT id FROM "Collection" WHERE id = ${collectionId}
+        UNION
+        SELECT child.id FROM "Collection" child
+        JOIN subtree parent ON child."parentId" = parent.id
+      )
+      SELECT id FROM subtree
+    `;
+    const collectionIds = subtree.map((row) => row.id);
+    const links = await tx.link.findMany({
+      where: { collectionId: { in: collectionIds } },
+      select: { id: true },
+    });
+    // PostgreSQL cascades the entire subtree and its links in this transaction.
+    // No filesystem or search changes happen before a successful commit.
+    const result = await tx.collection.delete({ where: { id: collectionId } });
+    await clearCollectionOrders(tx, collectionIds);
+    return { result, collectionIds, linkIds: links.map((link) => link.id) };
   });
 
-  if (dashboardSection) {
-    const sectionOrder = dashboardSection.order;
-
-    await prisma.$transaction(async (tx) => {
-      await tx.dashboardSection.delete({
-        where: {
-          id: dashboardSection.id,
-        },
-      });
-
-      await tx.dashboardSection.updateMany({
-        where: {
-          userId,
-          order: {
-            gt: sectionOrder,
-          },
-        },
-        data: {
-          order: {
-            decrement: 1,
-          },
-        },
-      });
-    });
-  }
+  const cleanup = await Promise.allSettled([
+    ...(meiliClient && deleted.linkIds.length
+      ? [meiliClient.index("links").deleteDocuments(deleted.linkIds)]
+      : []),
+    ...deleted.collectionIds.flatMap((id) => [
+      removeFolder({ filePath: `archives/${id}` }),
+      removeFolder({ filePath: `archives/preview/${id}` }),
+    ]),
+  ]);
+  if (cleanup.some((result) => result.status === "rejected"))
+    console.error(
+      "Collection deleted; archive or search cleanup requires retry.",
+      {
+        collectionIds: deleted.collectionIds,
+      }
+    );
+  return { response: deleted.result, status: 200 };
 }

@@ -12,11 +12,19 @@ import { Separator } from "../ui/separator";
 
 type Props = {
   onClose: Function;
+  links: LinkIncludingShortenedCollectionAndTags[];
 };
 
-export default function BulkEditLinksModal({ onClose }: Props) {
+export default function BulkEditLinksModal({ onClose, links }: Props) {
   const { t } = useTranslation();
   const { selectedIds, clearSelected, selectionCount } = useLinkStore();
+  // Freeze the versions the user saw when opening the form, across polling updates.
+  const [selectedLinks] = useState(() =>
+    Object.keys(selectedIds).map((id) => ({
+      id: Number(id),
+      version: links.find((link) => link.id === Number(id))?.version,
+    }))
+  );
   const [submitLoader, setSubmitLoader] = useState(false);
   const [removePreviousTags, setRemovePreviousTags] = useState(false);
   const [updatedValues, setUpdatedValues] = useState<
@@ -40,13 +48,9 @@ export default function BulkEditLinksModal({ onClose }: Props) {
 
       const load = toast.loading(t("updating"));
 
-      const links = Object.keys(selectedIds).map((k) => ({
-        id: Number(k),
-      }));
-
       await updateLinks.mutateAsync(
         {
-          links,
+          links: selectedLinks,
           newData: updatedValues,
           removePreviousTags,
         },

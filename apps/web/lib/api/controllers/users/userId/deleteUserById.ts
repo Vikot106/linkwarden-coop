@@ -118,8 +118,19 @@ export default async function deleteUserById(
     }
   }
 
-  // Delete the user and all related data within a transaction
-  await prisma
+  const enterpriseCollection = await prisma.collection.findFirst({
+    where: { ownerId: queryId, scope: { in: ["DEPARTMENT", "COMPANY"] } },
+    select: { id: true },
+  });
+  if (enterpriseCollection)
+    return {
+      response:
+        "This user owns enterprise collections. Transfer their ownership before deleting the account.",
+      status: 409,
+    };
+
+  // Delete the user and all related data within a transaction.
+  const deleted = await prisma
     .$transaction(
       async (prisma) => {
         const links = await prisma.link.findMany({
@@ -258,7 +269,16 @@ export default async function deleteUserById(
       },
       { timeout: 20000 }
     )
-    .catch((err) => console.log(err));
+    .then(
+      () => true,
+      () => false
+    );
+
+  if (!deleted)
+    return {
+      response: "Failed to delete the user account. Please try again.",
+      status: 500,
+    };
 
   return {
     response: "User account and all related data deleted successfully.",

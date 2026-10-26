@@ -60,8 +60,10 @@ export default function LinkDetails({
     useState<LinkIncludingShortenedCollectionAndTags>(activeLink);
 
   useEffect(() => {
-    setLink(activeLink);
-  }, [activeLink]);
+    setLink((draft) =>
+      mode === "view" || draft.id !== activeLink.id ? activeLink : draft
+    );
+  }, [activeLink, mode]);
 
   const permissions = usePermissions(link.collection.id as number);
 
@@ -119,9 +121,13 @@ export default function LinkDetails({
       return;
     }
 
-    updateLink.mutateAsync(link);
-
-    setMode && setMode("view");
+    try {
+      const updated = await updateLink.mutateAsync(link);
+      setLink(updated);
+      setMode?.("view");
+    } catch {
+      // The mutation displays the error; retain the draft for conflict recovery.
+    }
   };
 
   const setCollection = (e: any) => {
